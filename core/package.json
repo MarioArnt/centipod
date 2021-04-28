@@ -1,0 +1,20 @@
+{
+  "name": "@neoxia/centipod-core",
+  "version": "0.0.1-alpha",
+  "private": true,
+  "description": "Monorepo utils",
+  "author": "Mario Arnautou",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "yarn tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "fast-glob": "^3.2.5",
+    "simple-git": "^2.38.0"
+  },
+  "devDependencies": {
+    "typescript": "^4.2.4"
+  }
+}

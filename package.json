@@ -1,0 +1,17 @@
+{
+  "name": "@neoxia/centipod",
+  "version": "0.0.1-alpha",
+  "private": true,
+  "workspaces": [
+    "core",
+    "cli"
+  ],
+  "description": "Monorepo utils",
+  "author": "Mario Arnautou",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^15.0.1",
+    "tslib": "^2.2.0",
+    "typescript": "^4.2.4"
+  }
+}
