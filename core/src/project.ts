@@ -2,6 +2,7 @@
 import { Workspace } from './workspace';
 import { join } from 'path';
 import { sync as glob } from 'fast-glob';
+import { IRunOptions, Runner } from './runner';
 
 export class Project extends Workspace {
   // Attributes
@@ -12,9 +13,8 @@ export class Project extends Workspace {
 
   // Statics
   static async loadProject(root: string): Promise<Project> {
-    const prj = new Project(await this.loadPackage(root), root);
+    const prj = new Project(await this.loadPackage(root), root, await this._loadConfig(root));
     await prj.loadWorkspaces();
-
     return prj;
   }
 
@@ -41,20 +41,6 @@ export class Project extends Workspace {
     return this._workspaces.get(name) || null;
   }
 
-  runCommand(cmd: string, options: { parallel: boolean, to: Workspace }) {
-    const concurrency = 4;
-    if (options.parallel) {
-      if (options.to) {
-        // Only on targeted workspace
-      } else {
-        // All workspace in parallel with given concurrency
-      }
-    } else {
-      // sort workspace topologically (until --to if given, or all of them otherwise)
-      // run command on each branch
-    }
-  }
-
   *leaves(): Generator<Workspace, void>  {
     for (const worskpace of this.workspaces.values()) {
       let isLeaf = true;
@@ -74,5 +60,28 @@ export class Project extends Workspace {
       }
       if (isRoot) yield worskpace;
     }
+  }
+
+  getTopologicallySortedWorkspaces(to?: Workspace): Workspace[] {
+    const sortedWorkspaces: Set<Workspace> = new Set<Workspace>();
+    const visitWorkspace = (workspace: Workspace): void => {
+      for (const dep of workspace.dependencies()) {
+        visitWorkspace(dep);
+      }
+      sortedWorkspaces.add(workspace);
+    };
+    if (to) {
+      visitWorkspace(to);
+    } else {
+      for (const root of this.roots()) {
+        visitWorkspace(root);
+      }
+    } 
+    return Array.from(sortedWorkspaces);
+  }
+
+  runCommand(cmd: string, options: Partial<IRunOptions>) {
+    const runner = new Runner(this);
+    return runner.runCommand(cmd, options);
   }
 }

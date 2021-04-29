@@ -2,19 +2,22 @@
 import { Project } from './project';
 import { promises as fs } from 'fs';
 import { join, relative } from 'path';
-import type { Package } from './package';
+import { Package } from './package';
 import { git } from './git';
 import { sync as glob } from 'fast-glob';
+import { command } from 'execa';
+import { Config } from './config';
+import { IProcessResult } from './process';
+import { Cache } from './cache';
 
 export class Workspace {
   // Constructor
   constructor(
     protected readonly pkg: Package,
     readonly root: string,
+    protected readonly _config: Config,
     readonly project?: Project
   ) {}
-
-  private _dependencies: Set<Workspace>;
 
   // Statics
   protected static async loadPackage(root: string): Promise<Package> {
@@ -24,7 +27,20 @@ export class Workspace {
   }
 
   static async loadWorkspace(root: string, project?: Project): Promise<Workspace> {
-    return new Workspace(await this.loadPackage(root), root, project);
+    return new Workspace(await this.loadPackage(root), root, await this._loadConfig(root), project);
+  }
+
+  protected static async _loadConfig(root: string): Promise<Config> {
+    const file = join(root, 'centipod.json');
+    try {
+      const data = await fs.readFile(file, 'utf-8');
+      return JSON.parse(data);
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        return {};
+      }
+      throw e;
+    }
   }
 
   // Methods
@@ -61,17 +77,11 @@ export class Workspace {
     }
   }
 
-  resolveDependencies() {
-    const _resolveDependencies = (deps: Generator<Workspace>) => {
-      for (const dep of deps) {
-        this._dependencies.add(dep);
-        _resolveDependencies(dep.dependencies());
-      }
-    }
-    _resolveDependencies(this.dependencies());
+  // Properties
+  get config(): Config {
+    return this._config;
   }
 
-  // Properties
   get name(): string {
     return this.pkg.name;
   }
@@ -114,5 +124,25 @@ export class Workspace {
 
   async isAffected(rev1: string, rev2?: string, pattern = '**'): Promise<boolean> {
     return await this._testDepsAffected(new Set(), rev1, rev2, pattern);
+  }
+
+  async hasCommand(cmd: string): Promise<boolean> {
+    return !!this.config[cmd];
+  }
+
+  async run(cmd: string, force = false): Promise<IProcessResult> {
+    const now = Date.now();
+    const cache = new Cache(this, cmd);
+    const isCached = await cache.read();
+    if (!force && isCached) {
+      return {...isCached, took: Date.now() - now, fromCache: true };
+    }
+    const result = await command(this.config[cmd].cmd, {
+      cwd: this.root,
+      env: { ...process.env, FORCE_COLOR: '2' },
+      shell: process.platform === 'win32',
+    });
+    cache.write(result);
+    return {...result, took: Date.now() - now, fromCache: false };
   }
 }
