@@ -8,6 +8,7 @@ export interface IRunOptions {
   parallel: boolean;
   to: Workspace;
   force: boolean;
+  affected: { rev1: string, rev2: string};
 }
 
 export class Runner {
@@ -86,7 +87,13 @@ export class Runner {
       const targets: Workspace[] = [];
       await Promise.all(Array.from(eligible).map(async (workspace) => {
         const hasCommand = await workspace.hasCommand(cmd);
-        if (hasCommand) {
+        let isTarget = hasCommand;
+        if (options.affected?.rev1) {
+          const patterns = workspace.config[cmd].src;
+          const affected = await workspace.isAffected(options.affected.rev1, options.affected.rev2, patterns, !options.parallel);
+          isTarget = hasCommand && affected;
+        }
+        if (isTarget) {
           targets.push(workspace);
         }
       }));

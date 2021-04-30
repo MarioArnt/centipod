@@ -86,27 +86,27 @@ export class Workspace {
     return this.pkg.name;
   }
 
-  private async _testAffected(rev1: string, rev2?: string, pattern = '**'): Promise<boolean> {
+  private async _testAffected(rev1: string, rev2?: string, patterns: string[] = ['**']): Promise<boolean> {
     // Compute diff
     const diffs = rev2
       ? await git.diff('--name-only', rev1, rev2, '--', this.root)
       : await git.diff('--name-only', rev1, '--', this.root);
 
     // No pattern
-    if (pattern === '**') {
+    if (patterns.length === 0 && patterns[0] === '**') {
       return diffs.length > 0;
     }
 
     const rel = relative(git.root, this.root);
-    const files = glob(join(rel, pattern));
+    const files = patterns.map((pattern) => glob(join(rel, pattern))).reduce((acc, val) => acc = acc.concat(val), []);
     return diffs.some((diff) => files.includes(diff));
   }
 
-  private async _testDepsAffected(tested: Set<Workspace>,rev1: string, rev2?: string, pattern = '**'): Promise<boolean> {
+  private async _testDepsAffected(tested: Set<Workspace>,rev1: string, rev2?: string, patterns: string[] = ['**']): Promise<boolean> {
     tested.add(this);
 
     // Test if is affected
-    const affected = await this._testAffected(rev1, rev2, pattern);
+    const affected = await this._testAffected(rev1, rev2, patterns);
     if (affected) return true;
 
     // Test dependencies if are affected
@@ -115,15 +115,18 @@ export class Workspace {
       if (tested.has(dep)) continue;
 
       // Test
-      const affected = await dep._testDepsAffected(tested, rev1, rev2, pattern);
+      const affected = await dep._testDepsAffected(tested, rev1, rev2, patterns);
       if (affected) return true;
     }
 
     return false;
   }
 
-  async isAffected(rev1: string, rev2?: string, pattern = '**'): Promise<boolean> {
-    return await this._testDepsAffected(new Set(), rev1, rev2, pattern);
+  async isAffected(rev1: string, rev2?: string, patterns: string[] = ['**'], topological = true): Promise<boolean> {
+    if (!topological) {
+      return await this._testAffected(rev1, rev2, patterns);
+    }
+    return await this._testDepsAffected(new Set(), rev1, rev2, patterns);
   }
 
   async hasCommand(cmd: string): Promise<boolean> {
