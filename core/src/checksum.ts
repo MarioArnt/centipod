@@ -26,12 +26,16 @@ export class Checksum {
 
   async calculate(): Promise<Record<string, string>> {
     const config = this._cache.config;
-    const src = config.src.map((s) => glob(s)).reduce((acc, val) => acc = acc.concat(val), []);
+    const src = config.src.map((s) => glob(join(this._cache.workspace.root, s))).reduce((acc, val) => acc = acc.concat(val), []);
+    if (!src.length) {
+      throw Error('No path to cache');
+    }
     const checksums: Record<string, string> = {
       cmd: config.cmd,
       globs: config.src.join(','),
     };
     await Promise.all(src.map(async (path) => {
+      // FIXME: Batch to avoid EMFILE
       checksums[path] = await fromFile(path, { algorithm: 'sha256' });
     }));
     return checksums;

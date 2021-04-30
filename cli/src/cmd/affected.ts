@@ -8,6 +8,7 @@ export const affected = async (rev1: string, rev2?: string) => {
       affected.add(workspace);
     }
   }
+  // TODO: Better output
   console.info('Workspaces affected', rev2 ? rev1 : 'HEAD', '->', rev2 || rev1, '\n');
-  console.debug(Array.from(affected).map(a => a.name).join('\n'));
+  console.info(Array.from(affected).map(a => a.name).join('\n'));
 };

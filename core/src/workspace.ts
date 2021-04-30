@@ -2,13 +2,15 @@
 import { Project } from './project';
 import { promises as fs } from 'fs';
 import { join, relative } from 'path';
-import { Package } from './package';
+import { INpmInfos, Package } from './package';
 import { git } from './git';
 import { sync as glob } from 'fast-glob';
 import { command } from 'execa';
 import { Config } from './config';
 import { IProcessResult } from './process';
 import { Cache } from './cache';
+import { Publish, PublishActions, PublishEvent, Upgrade } from './publish';
+import { Observable } from 'rxjs';
 
 export class Workspace {
   // Constructor
@@ -86,6 +88,12 @@ export class Workspace {
     return this.pkg.name;
   }
 
+  get version(): string | undefined {
+    return this.pkg.version;
+  }
+
+  private _publish: Publish | undefined;
+
   private async _testAffected(rev1: string, rev2?: string, patterns: string[] = ['**']): Promise<boolean> {
     // Compute diff
     const diffs = rev2
@@ -140,12 +148,45 @@ export class Workspace {
     if (!force && isCached) {
       return {...isCached, took: Date.now() - now, fromCache: true };
     }
-    const result = await command(this.config[cmd].cmd, {
-      cwd: this.root,
-      env: { ...process.env, FORCE_COLOR: '2' },
-      shell: process.platform === 'win32',
-    });
-    cache.write(result);
-    return {...result, took: Date.now() - now, fromCache: false };
+    try {
+      const result = await command(this.config[cmd].cmd, {
+        cwd: this.root,
+        env: { ...process.env, FORCE_COLOR: '2' },
+        shell: process.platform === 'win32',
+      });
+      cache.write(result);
+      return {...result, took: Date.now() - now, fromCache: false };
+    } catch (e) {
+      cache.invalidate();
+      throw e;
+    }
+  }
+
+  async bumpVersions(bump: Upgrade, identifier?: string): Promise<PublishActions> {
+    this._publish = new Publish(this, bump, identifier);
+    return this._publish.determineActions();   
+  }
+
+  publish(): Observable<PublishEvent> {
+    if (!this._publish) {
+      throw Error('You must bump versions before publishing');
+    }
+    return this._publish.release();   
+  }
+
+  async getNpmInfos(): Promise<INpmInfos> {
+    const infos = await command(`yarn npm info ${this.name} --json`);
+    return JSON.parse(infos.stdout);
+  }
+
+  async isPublished(version: string): Promise<boolean> {
+    const infos = await this.getNpmInfos();
+    return infos.versions.includes(version);
+  }
+
+  async setVersion(version: string) {
+    const manifest = await Workspace.loadPackage(this.root);
+    manifest.version = version;
+    await fs.writeFile(join(this.root, 'package.json'), JSON.stringify(manifest, null, 2));
   }
 }

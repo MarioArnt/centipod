@@ -35,5 +35,18 @@ export const git = {
     }
     // Get tags
     return await this.git.tags();
+  },
+
+  async tag(version: string): Promise<string> {
+    return await this.git.tag([version]);
+  },
+
+  async commit(files: string[], message: string): Promise<void> {
+    await this.git.commit(message, files);
+  },
+
+  async push(): Promise<void> {
+    await this.git.push();
+    await this.git.pushTags();
   }
 };

@@ -1,25 +1,26 @@
 import { IProcessResult, IRunCommandErrorEvent, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@neoxia/centipod-core";
 import chalk from 'chalk';
-
-const centipod = `${chalk.cyan.bold('>')} ${chalk.bgCyan.black.bold(' CENTIPOD ')}`;
+import { logger } from "../utils/logger";
+import { resolveWorkspace } from "../utils/validate-workspace";
 
 export const run = async (cmd: string, options: {P: boolean, T: boolean, force: boolean, to?: string, affected?: string}) => {
-  process.stdout.write('\n');
-  console.info(centipod, chalk.grey(`Running target ${chalk.white.bold(cmd)}`));
-  console.info(chalk.grey('———————————————————————————————————————————————'));
-  console.info(chalk.grey('Topological:', chalk.white(!options.P)));
-  console.info(chalk.grey('Parallel:', chalk.white(!!options.P)));
-  console.info(chalk.grey('Use caches:', chalk.white(!options.force)));
+  const project =  await Project.loadProject(resloveProjectRoot());
+  const to = options.to ? resolveWorkspace(project, options.to) : undefined;
+  logger.lf();
+  logger.info(logger.centipod, `Running command ${chalk.white.bold(cmd)}`, options.to ? `on project ${options.to}` : '');
+  logger.seperator();
+  logger.info('Topological:', chalk.white(!options.P));
+  logger.info('Parallel:', chalk.white(!!options.P));
+  logger.info('Use caches:', chalk.white(!options.force));
   const affected = options.affected?.split('..');
   let revisions: { rev1: string, rev2: string } | undefined;
   if (affected?.length) {
     const rev1 = affected?.length === 2 ? affected[0] : 'HEAD';
     const rev2 = affected?.length === 2 ? affected[1] : affected[0];
-    console.info(chalk.grey('Only affected packages between', chalk.white.bold(rev1, '->', rev2)));
+    logger.info('Only affected packages between', chalk.white.bold(rev1, '->', rev2));
     revisions = { rev1, rev2 };
   }
-  console.info(chalk.grey('———————————————————————————————————————————————'));
-  const project =  await Project.loadProject(resloveProjectRoot());
+  logger.seperator();
   const isProcessError = (error: unknown): error is IProcessResult => {
     return (error as IProcessResult)?.stderr != null;
   };
@@ -29,44 +30,54 @@ export const run = async (cmd: string, options: {P: boolean, T: boolean, force: 
   }
   const printError = (error: unknown) => {
     if (isNodeEvent(error)) {
+      logger.lf();
+      logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(error.workspace.name)}`, logger.failed);
       printError(error.error);
     } else if (isProcessError(error)) {
-      console.info(error.stdout);
-      console.info(error.stderr);
+      logger.log(error.stdout);
+      logger.log(error.stderr);
     } else {
-      console.error(error);
+      logger.error(error);
     }
   };
   let failures = new Set<Workspace>();
   const now = Date.now();
   let nbTargets = 0;
-  project.runCommand(cmd, { parallel: options.P, force: options.force, affected: revisions }).subscribe(
+  project.runCommand(cmd, { parallel: options.P, force: options.force, affected: revisions, to }).subscribe(
       (event) => {
         if (isTargetResolvedEvent(event)) {
-          console.info(chalk.grey('Targets resolved:'));
-          console.info(chalk.grey(event.targets.map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n')));
-          console.info(chalk.grey('———————————————————————————————————————————————'));
+          if (!event.targets.length) {
+            logger.lf();
+            logger.error(logger.centipod, logger.failed, `No project found for command "${cmd}"`);
+            logger.lf();
+            process.exit(1);
+          }
+          logger.info('Targets resolved:');
+          logger.info(event.targets.map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n'));
+          logger.seperator();
           nbTargets = event.targets.length;
         } else if (isNodeSucceededEvent(event)) {
-          process.stdout.write('\n');
-          console.log(centipod, `Run target ${chalk.bold(cmd)} on ${chalk.bold(event.workspace.name)} took ${chalk.magenta(event.result.took + 'ms')} ${event.result.fromCache ? chalk.bgCyanBright.bold.black(' FROM CACHE '): ''}`);
-          console.log(event.result.stdout);
-          console.info(chalk.grey('———————————————————————————————————————————————'));
+          logger.lf();
+          logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(event.workspace.name)} took ${logger.took(event.result.took )} ${event.result.fromCache ? logger.fromCache : ''}`);
+          logger.log(event.result.stdout);
+          logger.seperator();
         } else if (isNodeErroredEvent(event)) {
           printError(event.error);
         }
     },
     (err) => {
       printError(err);
+      logger.error(logger.centipod, logger.failed, 'Command failed');
+      process.exit(1)
     },
     () => {
-      process.stdout.write('\n');
+      logger.lf();
       const hasFailed = failures.size > 0;
-      const status = hasFailed ? chalk.bgRedBright.black.bold(' FAILED ') : chalk.bgGreen.black.bold(' SUCCESS ');
-      console.log(centipod, status, chalk.bold[hasFailed ? 'redBright' : 'green'](`Run target "${cmd}" ${hasFailed ? 'failed ' : 'succeeded'} on ${hasFailed ? failures.size + '/' + nbTargets : nbTargets} packages`), chalk.magenta(`took ${Date.now() - now}ms`));
+      const status = hasFailed ? logger.failed : logger.success;
+      logger.info(logger.centipod, status, chalk.bold[hasFailed ? 'redBright' : 'green'](`Run target "${cmd}" ${hasFailed ? 'failed ' : 'succeeded'} on ${hasFailed ? failures.size + '/' + nbTargets : nbTargets} packages`), logger.took(Date.now() - now));
       if (hasFailed) {
-        console.info(chalk.grey('Failed packages:'));
-        console.info(chalk.grey(Array.from(failures).map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n')));
+        logger.info('Failed packages:');
+        logger.info(Array.from(failures).map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n'));
       }
       process.exit(hasFailed ? 1 : 0);
     },

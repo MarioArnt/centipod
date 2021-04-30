@@ -39,10 +39,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@neoxia/centipod-core@workspace:core"
   dependencies:
+    "@types/lodash": 4.14.168
+    "@types/semver": ^7.3.5
     execa: ^5.0.0
     fast-glob: ^3.2.5
     hasha: 5.2.2
+    lodash.isequal: 4.5.0
     rxjs: ^6.6.7
+    semver: ^7.3.5
     simple-git: ^2.38.0
     typescript: ^4.2.4
   languageName: unknown
@@ -85,10 +89,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/lodash@npm:4.14.168":
+  version: 4.14.168
+  resolution: "@types/lodash@npm:4.14.168"
+  checksum: 9a4e25f89fc035b9f0388f1f7be85e5eff49f9e6db0d93432c9a89fce0916f8a89db4e8290415f7ea02de6b00d3573826378dcb655b7b2d20530a6e8d6dd6fd0
+  languageName: node
+  linkType: hard
+
 "@types/node@npm:^15.0.1":
   version: 15.0.1
   resolution: "@types/node@npm:15.0.1"
   checksum: 4e4fb69394efb224272ad7c6b6dc16a381b97e46a8f3c21d33fec51ef13a4d635f571b446d127eae333ea6a763f304b787f4b3f73e24e1f3b05a21b481900dfb
+  languageName: node
+  linkType: hard
+
+"@types/semver@npm:^7.3.5":
+  version: 7.3.5
+  resolution: "@types/semver@npm:7.3.5"
+  checksum: fcb9faf9aced715efee64fbef485f2a58b3ea822b0a0c4a30cc52135dfba7668f21d5a2a3510ed7b158af6b9d0f927f66eff91e2f3866372aec41a6a7fae8665
   languageName: node
   linkType: hard
 
@@ -292,6 +310,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash.isequal@npm:4.5.0":
+  version: 4.5.0
+  resolution: "lodash.isequal@npm:4.5.0"
+  checksum: 5b47e094641c18a915497343894c66f7da6aebb9aaa2a3fcc5643455aaf29d19df60ebbed664c8374fb959c8b4ce96810ee6becd8a71ac58c6c2ca8d29762947
+  languageName: node
+  linkType: hard
+
+"lru-cache@npm:^6.0.0":
+  version: 6.0.0
+  resolution: "lru-cache@npm:6.0.0"
+  dependencies:
+    yallist: ^4.0.0
+  checksum: b8b78353d2391c0f135cdc245c4744ad41c2efb1a6d98f31bc57a2cf48ebf02de96e4876657c3026673576bf1f1f61fc3fdd77ab00ad1ead737537bf17d8019d
+  languageName: node
+  linkType: hard
+
 "merge-stream@npm:^2.0.0":
   version: 2.0.0
   resolution: "merge-stream@npm:2.0.0"
@@ -391,6 +425,17 @@ __metadata:
   dependencies:
     tslib: ^1.9.0
   checksum: 1146975cbd5388ee5e61450235dc5670931e43cce71813f567977d334acc4d75c6e8d9d293df67e1fb31510b99fc8957943d4a9b550d109e4dc69967a8471543
+  languageName: node
+  linkType: hard
+
+"semver@npm:^7.3.5":
+  version: 7.3.5
+  resolution: "semver@npm:7.3.5"
+  dependencies:
+    lru-cache: ^6.0.0
+  bin:
+    semver: bin/semver.js
+  checksum: c53624ddf4b9779bcbf55a1eb8b37074cc44bfeca416f3cc263429408202a8a3c59b00eef8c647d697303bc39b95c022a5c61959221d3814bfb1270ff7c14986
   languageName: node
   linkType: hard
 
@@ -502,5 +547,12 @@ typescript@^4.2.4:
   bin:
     node-which: ./bin/node-which
   checksum: ea9b1db1266b08f7880717cf70dd9012dd523e5a317f10fbe4d5e8c1a761c5fd237f88642f2ba33b23f973ff4002c9b26648d63084ab208d8ecef36497315f6e
+  languageName: node
+  linkType: hard
+
+"yallist@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "yallist@npm:4.0.0"
+  checksum: a2960ef879af6ee67a76cae29bac9d8bffeb6e9e366c217dbd21464e7fce071933705544724f47e90ba5209cf9c83c17d5582dd04415d86747a826b2a231efb8
   languageName: node
   linkType: hard
