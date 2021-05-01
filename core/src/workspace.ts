@@ -154,12 +154,17 @@ export class Workspace {
         env: { ...process.env, FORCE_COLOR: '2' },
         shell: process.platform === 'win32',
       });
-      cache.write(result);
+      await cache.write(result);
       return {...result, took: Date.now() - now, fromCache: false };
     } catch (e) {
       cache.invalidate();
       throw e;
     }
+  }
+
+  async invalidate(cmd: string) {
+    const cache = new Cache(this, cmd);
+    await cache.invalidate();
   }
 
   async bumpVersions(bump: Upgrade, identifier?: string): Promise<PublishActions> {

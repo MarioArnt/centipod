@@ -6,6 +6,8 @@ import { isAffected } from './cmd/is-affected';
 import { publish } from './cmd/publish';
 import { run } from './cmd/run';
 
+// TODO: Validate command input
+
 const program = new Command();
 
 program.version('0.0.1-alpha');
@@ -55,11 +57,11 @@ program
 
   program
   .command('run <cmd>')
-  .option('-p')
-  .option('-t')
-  .option('--force')
-  .option('--to <workspace>')
-  .option('--affected <rev1>..[rev2]')
+  .option('-p, --parallel', 'Run asad')
+  .option('-t, --topological', 'Edeede')
+  .option('--force', 'deddede')
+  .option('--to <workspace>', 'ddedede')
+  .option('--affected <rev1>..[rev2]', 'deddede')
   .description('start microlambda services')
   .action(
     async (cmd, options) =>

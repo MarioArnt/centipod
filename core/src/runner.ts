@@ -21,6 +21,7 @@ export class Runner {
   runCommand(cmd: string, options: Partial<IRunOptions>): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       this._resolveTargets(cmd, options).then((targets) => {
+        // TODO: Validate configurations for each targets
         obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets });
         if (!targets.length) {
           obs.complete();
@@ -53,7 +54,9 @@ export class Runner {
                     obs.complete();
                   }
                 } else if (isNodeErroredEvent(evt)) {
-                  obs.error(evt);
+                  Promise.all(targets.map(t => t.invalidate(cmd))).finally(() => {
+                    obs.error(evt);
+                  });
                 }
               },
               (error) => obs.error(error),

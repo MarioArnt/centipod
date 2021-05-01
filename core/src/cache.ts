@@ -61,7 +61,7 @@ export class Cache {
       await this._createCacheDirectory();
       try {
         await Promise.all([
-          fs.writeFile(checksums.checksumPath, JSON.stringify(checksums)),
+          fs.writeFile(checksums.checksumPath, JSON.stringify(toWrite)),
           fs.writeFile(this.outputPath, JSON.stringify(output)),
         ]);
       } catch (e) {
