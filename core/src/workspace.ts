@@ -7,7 +7,7 @@ import { git } from './git';
 import { sync as glob } from 'fast-glob';
 import { command } from 'execa';
 import { Config } from './config';
-import { IProcessResult } from './process';
+import { ICommandResult, IProcessResult } from './process';
 import { Cache } from './cache';
 import { Publish, PublishActions, PublishEvent, Upgrade } from './publish';
 import { Observable } from 'rxjs';
@@ -142,20 +142,26 @@ export class Workspace {
   }
 
   async run(cmd: string, force = false): Promise<IProcessResult> {
-    const now = Date.now();
+    let now = Date.now();
     const cache = new Cache(this, cmd);
-    const isCached = await cache.read();
-    if (!force && isCached) {
-      return {...isCached, took: Date.now() - now, fromCache: true };
+    const cachedOutputs = await cache.read();
+    if (!force && cachedOutputs) {
+      return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true }
     }
     try {
-      const result = await command(this.config[cmd].cmd, {
-        cwd: this.root,
-        env: { ...process.env, FORCE_COLOR: '2' },
-        shell: process.platform === 'win32',
-      });
-      await cache.write(result);
-      return {...result, took: Date.now() - now, fromCache: false };
+      const results: ICommandResult[] = [];
+      const cmds = this.config[cmd].cmd;
+      for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
+        now = Date.now();
+        const result = await command(_cmd, {
+          cwd: this.root,
+          env: { ...process.env, FORCE_COLOR: '2' },
+          shell: process.platform === 'win32',
+        });
+        results.push({...result, took: Date.now() - now });
+      }
+      await cache.write(results);
+      return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
     } catch (e) {
       cache.invalidate();
       throw e;
@@ -172,11 +178,11 @@ export class Workspace {
     return this._publish.determineActions();   
   }
 
-  publish(): Observable<PublishEvent> {
+  publish(accessPublic = false): Observable<PublishEvent> {
     if (!this._publish) {
       throw Error('You must bump versions before publishing');
     }
-    return this._publish.release();   
+    return this._publish.release(accessPublic);   
   }
 
   async getNpmInfos(): Promise<INpmInfos> {

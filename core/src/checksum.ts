@@ -1,4 +1,3 @@
-import { Workspace } from "./workspace";
 import { promises as fs } from 'fs';
 import { sync as glob } from 'fast-glob';
 import { join } from 'path';
@@ -31,7 +30,7 @@ export class Checksum {
       throw Error('No path to cache');
     }
     const checksums: Record<string, string> = {
-      cmd: config.cmd,
+      cmd: Array.isArray(config.cmd) ? config.cmd.join(',') : config.cmd,
       globs: config.src.join(','),
     };
     await Promise.all(src.map(async (path) => {

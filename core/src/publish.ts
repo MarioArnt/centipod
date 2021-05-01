@@ -84,7 +84,7 @@ export class Publish {
   private _actionsResolved = false;
   private _actions: PublishActions = new PublishActions();
 
-  release(): Observable<PublishEvent> {
+  release(accessPublic = false): Observable<PublishEvent> {
     return new Observable((obs) => {
       this.determineActions().then(async (actions) => {
         obs.next({ type: PublishEventType.ACTIONS_RESOLVED, actions });
@@ -99,11 +99,14 @@ export class Publish {
           }
           try {
             await action.workspace.setVersion(action.targetVersion);
-            const output = await this._publish(action.workspace);
+            const output = await this._publish(action.workspace, accessPublic);
             toCommit.push(join(action.workspace.root, 'package.json'));
             await this._createTag(action.workspace, action.targetVersion);
             obs.next({ type: PublishEventType.PUBLISHED_NODE, action, output });
           } catch (e) {
+            if (action.currentVersion) {
+              await action.workspace.setVersion(action.currentVersion);
+            }
             obs.error(e);
             obs.complete();
           }
@@ -159,8 +162,8 @@ export class Publish {
     return this._actions;
   }
 
-  private async _publish(workspace: Workspace) {
-    return await command('yarn npm publish', { cwd: workspace.root });
+  private async _publish(workspace: Workspace, accessPublic = false) {
+    return await command(`yarn npm publish ${accessPublic ? '--access public' :''}`, { cwd: workspace.root });
   }
 
   private async _createTag(workspace: Workspace, version: string) {

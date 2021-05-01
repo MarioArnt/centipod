@@ -1,9 +1,14 @@
 import { ExecaReturnValue } from "execa";
 import { Workspace } from "./workspace";
 
-export interface IProcessResult<T = string> extends ExecaReturnValue<T> {
-  took: number;
+export interface IProcessResult<T= string> {
+  commands: Array<ICommandResult<T>>;
+  overall: number;
   fromCache: boolean;
+}
+
+export interface ICommandResult<T = string> extends ExecaReturnValue<T> {
+  took: number; 
 }
 
 export enum RunCommandEventEnum {

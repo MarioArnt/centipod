@@ -4,7 +4,7 @@ import { resolveWorkspace } from "../utils/validate-workspace";
 import chalk from 'chalk';
 import { createInterface } from "readline";
 
-export const publish = async (workspaceName: string, bump: Upgrade, identifier: string | undefined, options: { yes: boolean }) => {
+export const publish = async (workspaceName: string, bump: Upgrade, identifier: string | undefined, options: { yes: boolean, accessPublic: boolean }) => {
   const project =  await Project.loadProject(resloveProjectRoot());
   const workspace = resolveWorkspace(project, workspaceName);
   logger.lf();
@@ -33,7 +33,7 @@ export const publish = async (workspaceName: string, bump: Upgrade, identifier: 
   }
   logger.seperator();
   const doPublish = () => {
-    workspace.publish().subscribe(
+    workspace.publish(options.accessPublic).subscribe(
       (evt) => {
         if (isPublishedEvent(evt)) {
           logger.info(`Published ${chalk.white.bold(evt.action.workspace.name)}@${chalk.white.bold(evt.action.targetVersion)}`);

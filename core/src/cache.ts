@@ -6,6 +6,7 @@ import { join } from 'path';
 import { F_OK } from 'constants';
 import chalk from 'chalk';
 import { isEqual } from 'lodash';
+import { ICommandResult } from './process';
 
 export class Cache {
   constructor (
@@ -31,7 +32,7 @@ export class Cache {
 
   private _checksums: Record<string, string> | undefined;
 
-  async read(): Promise<ExecaReturnValue<string> | null> {
+  async read(): Promise<Array<ICommandResult<string>> | null> {
     try {
       const checksums = new Checksum(this);
       const [currentChecksums, storedChecksum] = await Promise.all([
@@ -54,7 +55,7 @@ export class Cache {
     }
   }
 
-  async write(output: ExecaReturnValue<string>) {
+  async write(output: Array<ICommandResult<string>>) {
     try {
       const checksums = new Checksum(this)
       const toWrite = this._checksums ?? await checksums.calculate();

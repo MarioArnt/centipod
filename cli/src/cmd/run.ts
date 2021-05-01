@@ -1,4 +1,4 @@
-import { IProcessResult, IRunCommandErrorEvent, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@neoxia/centipod-core";
+import { ICommandResult, IRunCommandErrorEvent, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@neoxia/centipod-core";
 import chalk from 'chalk';
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
@@ -22,8 +22,8 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
     revisions = { rev1, rev2 };
   }
   logger.seperator();
-  const isProcessError = (error: unknown): error is IProcessResult => {
-    return (error as IProcessResult)?.stderr != null;
+  const isProcessError = (error: unknown): error is ICommandResult => {
+    return (error as ICommandResult)?.stderr != null;
   };
   const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
     const candidate = (error as IRunCommandErrorEvent);
@@ -62,14 +62,16 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
           nbTargets = event.targets.length;
         } else if (isNodeSucceededEvent(event)) {
           logger.lf();
-          logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(event.workspace.name)} took ${logger.took(event.result.took )} ${event.result.fromCache ? logger.fromCache : ''}`);
-          logger.lf();
-          logger.info(chalk.cyan('>'), event.result.command);
-          logger.lf();
-          if (event.result.stdout) {
-            logger.log(event.result.stdout);
-          } else {
-            logger.info('Process exited with status', event.result.exitCode);
+          logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(event.workspace.name)} took ${logger.took(event.result.overall )} ${event.result.fromCache ? logger.fromCache : ''}`);
+          for (const command of event.result.commands) {
+            logger.lf();
+            logger.info(chalk.cyan('>'), command.command);
+            logger.lf();
+            if (command.stdout) {
+              logger.log(command.stdout);
+            } else {
+              logger.info('Process exited with status', command.exitCode);
+            }
           }
           logger.seperator();
         } else if (isNodeErroredEvent(event)) {

@@ -73,6 +73,7 @@ program
   program
   .command('publish <workspace> <bump> [identifier]')
   .option('--yes')
+  .option('--access-public')
   .description('publish package')
   .action(
     async (workspace, bump, identifier, options) =>
