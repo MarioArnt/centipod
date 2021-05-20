@@ -3,11 +3,16 @@ import { Workspace } from './workspace';
 import { join } from 'path';
 import { sync as glob } from 'fast-glob';
 import { IRunOptions, Runner } from './runner';
+import { Publish } from './publish';
+import { ReleaseType } from 'semver';
+import { CentipodError, CentipodErrorCode } from './error';
+import { Observable } from 'rxjs';
+import { RunCommandEvent } from './process';
 
 export class Project extends Workspace {
   // Attributes
   private readonly _workspaces = new Map<string, Workspace>();
-
+  readonly project = this;
   // Getters
   get workspaces(): Map<string, Workspace> { return this._workspaces }
 
@@ -19,7 +24,7 @@ export class Project extends Workspace {
   }
 
   // Methods
-  private async loadWorkspaces() {
+  private async loadWorkspaces(): Promise<void> {
     // Load workspaces
     if (this.pkg.workspaces && this.pkg.workspaces.length > 0) {
       const patterns = this.pkg.workspaces.map(wks => glob(join(this.root, wks, 'package.json'))).reduce((acc, val) => acc = acc.concat(val), []);
@@ -31,7 +36,7 @@ export class Project extends Workspace {
           this._workspaces.set(wks.name, wks);
 
         } catch (error) {
-          console.warn(`Unable to load workspace at ${root}: ${error}`);
+          throw new CentipodError(CentipodErrorCode.UNABLE_TO_LOAD_WORKSPACE, `Unable to load workspace at ${root}: ${error}`);
         }
       }
     }
@@ -80,8 +85,14 @@ export class Project extends Workspace {
     return Array.from(sortedWorkspaces);
   }
 
-  runCommand(cmd: string, options: Partial<IRunOptions>) {
+  runCommand(cmd: string, options: Partial<IRunOptions>): Observable<RunCommandEvent> {
     const runner = new Runner(this);
     return runner.runCommand(cmd, options);
+  }
+
+  async publishAll(bump?: ReleaseType, identifier?: string): Promise<Publish> {
+    const publisher = new Publish(this);
+    await publisher.determineActions(undefined, bump, identifier);
+    return publisher;
   }
 }

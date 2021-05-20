@@ -1,6 +1,7 @@
-import { Project, resloveProjectRoot, Workspace } from "@neoxia/centipod-core";
+import { Project, resloveProjectRoot, Workspace } from "@centipod/core";
+import { logger } from "../utils/logger";
 
-export const affected = async (rev1: string, rev2?: string) => {
+export const affected = async (rev1: string, rev2?: string): Promise<void> => {
   const project =  await Project.loadProject(resloveProjectRoot());
   const affected = new Set<Workspace>();
   for (const workspace of project.workspaces.values()) {
@@ -9,6 +10,6 @@ export const affected = async (rev1: string, rev2?: string) => {
     }
   }
   // TODO: Better output
-  console.info('Workspaces affected', rev2 ? rev1 : 'HEAD', '->', rev2 || rev1, '\n');
-  console.info(Array.from(affected).map(a => a.name).join('\n'));
+  logger.info('Workspaces affected', rev2 ? rev1 : 'HEAD', '->', rev2 || rev1, '\n');
+  logger.info(Array.from(affected).map(a => a.name).join('\n'));
 };

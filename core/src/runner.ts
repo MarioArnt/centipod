@@ -39,7 +39,7 @@ export class Runner {
           )
         } else {
           let force = !!options.force;
-          const runNextWorkspace = () => {
+          const runNextWorkspace = (): void => {
             this._runForWorkspace(targets[0], cmd, force).subscribe(
               (evt) => {
                 if (isNodeSucceededEvent(evt)) {

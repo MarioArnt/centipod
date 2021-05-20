@@ -1,4 +1,4 @@
-import { Project, Workspace } from "@neoxia/centipod-core";
+import { Project, Workspace } from "@centipod/core";
 import { logger } from "./logger";
 
 export const resolveWorkspace = (project: Project, workspaceName: string): Workspace => {

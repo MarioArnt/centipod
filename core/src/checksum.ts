@@ -3,9 +3,9 @@ import { sync as glob } from 'fast-glob';
 import { join } from 'path';
 import { fromFile } from 'hasha';
 import { Cache } from "./cache";
+import { CentipodError, CentipodErrorCode } from './error';
 
 export class Checksum {
-
   constructor (
     private readonly _cache: Cache,
   ) {}
@@ -27,7 +27,7 @@ export class Checksum {
     const config = this._cache.config;
     const src = config.src.map((s) => glob(join(this._cache.workspace.root, s))).reduce((acc, val) => acc = acc.concat(val), []);
     if (!src.length) {
-      throw Error('No path to cache');
+      throw new CentipodError(CentipodErrorCode.NO_FILES_TO_CACHE, 'No path to cache');
     }
     const checksums: Record<string, string> = {
       cmd: Array.isArray(config.cmd) ? config.cmd.join(',') : config.cmd,

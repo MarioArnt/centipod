@@ -42,7 +42,7 @@ export const git = {
   },
 
   async commit(files: string[], message: string): Promise<void> {
-    await this.git.commit(message, files);
+    await this.git.commit(message, files, { '--allow-empty': 'true' });
   },
 
   async push(): Promise<void> {

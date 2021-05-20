@@ -1,4 +1,3 @@
-import { ExecaReturnValue } from 'execa';
 import { promises as fs } from 'fs';
 import { Checksum } from './checksum';
 import { Workspace } from './workspace';
@@ -7,6 +6,8 @@ import { F_OK } from 'constants';
 import chalk from 'chalk';
 import { isEqual } from 'lodash';
 import { ICommandResult } from './process';
+import { CentipodError, CentipodErrorCode } from './error';
+import { IConfigEntry } from './config';
 
 export class Cache {
   constructor (
@@ -22,11 +23,11 @@ export class Cache {
     return join(this.cacheFolder, 'output.json');
   }
 
-  get config() {
+  get config(): IConfigEntry {
     return this._workspace.config[this._cmd];
   }
 
-  get workspace() {
+  get workspace(): Workspace {
     return this._workspace;
   }
 
@@ -46,16 +47,18 @@ export class Cache {
       const output = await fs.readFile(this.outputPath);
       return JSON.parse(output.toString());
     } catch (e) {
-      if (e.message === 'No path to cache') {
+      if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
+        // eslint-disable-next-line no-console
         console.warn(chalk.yellow(`Patterns ${this.config.src.join('|')} has no match: ignoring cache`));
         return null;
       }
+      // eslint-disable-next-line no-console
       console.warn('Cannot read from cache', e);
       return null;
     }
   }
 
-  async write(output: Array<ICommandResult<string>>) {
+  async write(output: Array<ICommandResult<string>>): Promise<void> {
     try {
       const checksums = new Checksum(this)
       const toWrite = this._checksums ?? await checksums.calculate();
@@ -66,18 +69,19 @@ export class Cache {
           fs.writeFile(this.outputPath, JSON.stringify(output)),
         ]);
       } catch (e) {
-        if (e.message === 'No path to cache') {
+        if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
           await this.invalidate();
         } else {
           throw e;
         }
       }
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.warn('Error writing cache', e);
     }
   }
 
-  async invalidate() {
+  async invalidate(): Promise<void> {
     try {
       const checksums = new Checksum(this);
       const exists = async (path: string): Promise<boolean> => {
@@ -101,7 +105,7 @@ export class Cache {
         removeIfExists(this.outputPath),
       ]);
     } catch (e) {
-      throw Error('Fatal: error invalidating cache. Next command runs could have unexpected result !');
+      throw new CentipodError(CentipodErrorCode.INVALIDATING_CACHE_FAILED, 'Fatal: error invalidating cache. Next command runs could have unexpected result !');
     }
   }
 

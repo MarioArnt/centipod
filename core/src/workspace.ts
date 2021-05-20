@@ -9,8 +9,10 @@ import { command } from 'execa';
 import { Config } from './config';
 import { ICommandResult, IProcessResult } from './process';
 import { Cache } from './cache';
-import { Publish, PublishActions, PublishEvent, Upgrade } from './publish';
+import { Publish, PublishActions, PublishEvent } from './publish';
 import { Observable } from 'rxjs';
+import { CentipodError, CentipodErrorCode } from './error';
+import semver from 'semver';
 
 export class Workspace {
   // Constructor
@@ -48,10 +50,8 @@ export class Workspace {
   // Methods
   *dependencies(): Generator<Workspace, void> {
     if (!this.project) {
-      console.warn(`Cannot load dependencies of workspace ${this.name}: loaded outside of a project`);
-      return;
+      throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, `Cannot load dependencies of workspace ${this.name}: loaded outside of a project`)
     }
-
     // Generate dependencies
     for (const deps of [this.pkg.dependencies, this.pkg.devDependencies]) {
       if (!deps) continue;
@@ -65,8 +65,7 @@ export class Workspace {
 
   *dependents(): Generator<Workspace, void> {
     if (!this.project) {
-      console.warn(`Cannot load dependencies of workspace ${this.name}: loaded outside of a project`);
-      return;
+      throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, `Cannot load dependencies of workspace ${this.name}: loaded outside of a project`)
     }
     for (const workspace of this.project.workspaces.values()) {
       if (workspace === this) continue;
@@ -88,11 +87,16 @@ export class Workspace {
     return this.pkg.name;
   }
 
+  get private(): boolean {
+    return this.pkg.private === true;
+  }
+
   get version(): string | undefined {
     return this.pkg.version;
   }
 
   private _publish: Publish | undefined;
+  private _npmInfos: INpmInfos | undefined;
 
   private async _testAffected(rev1: string, rev2?: string, patterns: string[] = ['**']): Promise<boolean> {
     // Compute diff
@@ -168,26 +172,46 @@ export class Workspace {
     }
   }
 
-  async invalidate(cmd: string) {
+  async invalidate(cmd: string): Promise<void> {
     const cache = new Cache(this, cmd);
     await cache.invalidate();
   }
 
-  async bumpVersions(bump: Upgrade, identifier?: string): Promise<PublishActions> {
-    this._publish = new Publish(this, bump, identifier);
-    return this._publish.determineActions();   
+  async bumpVersions(bump: semver.ReleaseType, identifier?: string): Promise<PublishActions> {
+    if (!this.project) {
+      throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, 'Cannot publish outside a project');
+    }
+    this._publish = new Publish(this.project);
+    return this._publish.determineActions(this, bump, identifier);   
   }
 
-  publish(accessPublic = false): Observable<PublishEvent> {
+  publish(options = { access: 'public', dry: false }): Observable<PublishEvent> {
     if (!this._publish) {
-      throw Error('You must bump versions before publishing');
+      throw new CentipodError(CentipodErrorCode.PUBLISHED_WORKSPACE_WITHOUT_BUMP, 'You must bump versions before publishing');
     }
-    return this._publish.release(accessPublic);   
+    return this._publish.release(options);   
   }
 
   async getNpmInfos(): Promise<INpmInfos> {
-    const infos = await command(`yarn npm info ${this.name} --json`);
-    return JSON.parse(infos.stdout);
+    if (!this._npmInfos) {
+      try {
+        const result = await command(`yarn npm info ${this.name} --json`);
+        const parsedInfos = JSON.parse(result.stdout) as INpmInfos;
+        this._npmInfos = parsedInfos;
+        return parsedInfos;
+      } catch (e) {
+        try {
+          if (JSON.parse(e.stdout).name === 1) { // Not found
+            this._npmInfos = { name: this.name, versions: []};
+            return { name: this.name, versions: []};
+          }
+          throw e;
+        } catch (_e) {
+          throw e;
+        }
+      }
+    }
+    return this._npmInfos;
   }
 
   async isPublished(version: string): Promise<boolean> {
@@ -195,7 +219,12 @@ export class Workspace {
     return infos.versions.includes(version);
   }
 
-  async setVersion(version: string) {
+  async listGreaterVersionsInRegistry(version: string): Promise<Array<string>> {
+    const infos = await this.getNpmInfos();
+    return infos.versions.filter((v) => semver.gt(v, version));
+  }
+
+  async setVersion(version: string): Promise<void> {
     const manifest = await Workspace.loadPackage(this.root);
     manifest.version = version;
     await fs.writeFile(join(this.root, 'package.json'), JSON.stringify(manifest, null, 2));

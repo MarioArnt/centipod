@@ -1,6 +1,8 @@
+export interface IConfigEntry {
+  cmd: string | string[];
+  src: string[];
+}
+
 export interface Config {
-  [cmd: string]: {
-    cmd: string | string[];
-    src: string[];
-  }
+  [cmd: string]: IConfigEntry;
 }

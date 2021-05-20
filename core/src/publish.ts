@@ -4,19 +4,15 @@ import semver from 'semver';
 import { command, ExecaReturnValue } from "execa";
 import { Observable } from "rxjs";
 import { join } from 'path';
-
-export enum Upgrade {
-  PATCH = 'patch',
-  MINOR = 'minor',
-  MAJOR = 'major',
-}
+import { CentipodError, CentipodErrorCode } from "./error";
+import { Project } from "./project";
 
 export interface IPublishAction {
   workspace: Workspace;
   currentVersion?: string;
   targetVersion?: string;
   changed?: boolean;
-  error?: string;
+  error?: CentipodError;
 }
 
 enum PublishEventType {
@@ -64,7 +60,7 @@ export class PublishActions {
     return this._actions;
   }
 
-  add(action: IPublishAction) {
+  add(action: IPublishAction): void {
     this._actions.push(action);
   }
 
@@ -75,16 +71,25 @@ export class PublishActions {
 
 export class Publish {
   constructor(
-    private readonly _workspace: Workspace,
-    private readonly _bump: Upgrade,
-    private readonly _identifier?: string,
+    private readonly _project: Project,
   ) {}
 
   private _tags: string[] = [];
   private _actionsResolved = false;
   private _actions: PublishActions = new PublishActions();
 
-  release(accessPublic = false): Observable<PublishEvent> {
+  get actions(): PublishActions {
+    return this._actions;
+  }
+
+  async determineActions(workspace?: Workspace, bump?: semver.ReleaseType, identifier?: string): Promise<PublishActions> {
+    if (this._actionsResolved) {
+      return this._actions;
+    }
+    return this._preparePublish(workspace, bump, identifier);
+  }
+
+  release(options = { access: 'public', dry: false }): Observable<PublishEvent> {
     return new Observable((obs) => {
       this.determineActions().then(async (actions) => {
         obs.next({ type: PublishEventType.ACTIONS_RESOLVED, actions });
@@ -95,13 +100,15 @@ export class Publish {
         const toCommit: string[] = [];
         for (const action of actions.actions.filter((a) => a.changed)) {
           if (!action.targetVersion) {
-            continue;
+            throw new CentipodError(CentipodErrorCode.CANNOT_BUMP_VERSION, 'Missing target version');
           }
           try {
             await action.workspace.setVersion(action.targetVersion);
-            const output = await this._publish(action.workspace, accessPublic);
+            const output = await this._publish(action.workspace, options.access, options.dry);
             toCommit.push(join(action.workspace.root, 'package.json'));
-            await this._createTag(action.workspace, action.targetVersion);
+            if (!options.dry) {
+              await this._createTag(action.workspace, action.targetVersion);
+            }
             obs.next({ type: PublishEventType.PUBLISHED_NODE, action, output });
           } catch (e) {
             if (action.currentVersion) {
@@ -110,74 +117,105 @@ export class Publish {
             obs.error(e);
             obs.complete();
           }
+          if (options.dry && action.currentVersion) {
+            await action.workspace.setVersion(action.currentVersion);
+          }
         }
-        try {
-          const message = `chore: release ${this._workspace.name}@${actions.actions.find((a) => a.workspace === this._workspace)?.targetVersion}`
-          await git.commit(
-            toCommit,
-            message,
-          );
-          obs.next( {type: PublishEventType.COMMITED, message })
-          await git.push();
-          obs.next( {type: PublishEventType.PUSHED })
-          obs.complete();
-        } catch (e) {
-          obs.error(e);
+        if (!options.dry) {
+          try {
+            const message = `chore: publish packages\n${actions.actions.map((a) => `${a.workspace.name}@${a.targetVersion}`).join('\n')}`
+            await git.commit(
+              toCommit,
+              message,
+            );
+            obs.next( {type: PublishEventType.COMMITED, message });
+            await git.push();
+            obs.next( {type: PublishEventType.PUSHED })
+            obs.complete();
+          } catch (e) {
+            obs.error(e);
+            obs.complete();
+          }
+        } else {
           obs.complete();
         }
       });
     })
   }
 
-  async determineActions(): Promise<PublishActions> {
-    if (this._actionsResolved) {
-      return this._actions;
-    }
-    const project = this._workspace.project;
-    if (!project) {
-      throw Error('Cannot publish outside a project');
-    }
-    const dependencies = project.getTopologicallySortedWorkspaces(this._workspace);
-    for (const dep of dependencies) {
-      const currentVersion = dep.version;
-      if (await this._shouldBePublished(dep)) {
-        if (currentVersion) {
-          const targetVersion = semver.inc(currentVersion, this._bump, this._identifier);
-          if (!targetVersion) {
-            this._actions.add({ workspace: dep, error: 'semver couldnt determine target version', currentVersion })
-          }
-          else if (await dep.isPublished(targetVersion)) {
-            this._actions.add({ workspace: dep, error: 'already published', currentVersion, targetVersion })
-          } else {
-            this._actions.add({ workspace: dep, currentVersion, targetVersion, changed: true })
-          }
-        } else {
-          this._actions.add({ workspace: dep, error: 'version field unset in package.json' })
-        }
-      } else {
-        this._actions.add({ workspace: dep, changed: false, currentVersion })
+  private async _preparePublish(workspace?: Workspace, bump?: semver.ReleaseType, identifier?: string): Promise<PublishActions> {
+    const workspaces = this._project.getTopologicallySortedWorkspaces(workspace);
+    for (const workspace of workspaces) {
+      if (!workspace.version) {
+        this._actions.add({
+          workspace,
+          error: new CentipodError(CentipodErrorCode.MISSING_VERSION, 'Missing version field in package.json'),
+        });
+        continue;
       }
+      if (workspace.private) {
+        this._actions.add({
+          workspace,
+          error: new CentipodError(CentipodErrorCode.CANNOT_PUBLISH_PRIVATE_PACKAGE, 'Workspace is private and canoot be published'),
+        });
+        continue;
+      }
+      const currentVersion = workspace.version;
+      const targetVersion = bump ? semver.inc(currentVersion, bump, identifier) : currentVersion;
+      if (!targetVersion) {
+        this._actions.add({
+          workspace,
+          currentVersion,
+          error: new CentipodError(CentipodErrorCode.CANNOT_BUMP_VERSION, 'Cannot bump version with semver'),
+        });
+        continue;
+      }
+      const privateDependencies = await this._getPrivateDependencies(workspace);
+      if (privateDependencies.length) {
+        this._actions.add({
+          workspace,
+          currentVersion,
+          targetVersion,
+          error: new CentipodError(CentipodErrorCode.HAS_PRIVATE_DEPENDENCY, `Cannot publish package as it depends private workspaces: ${privateDependencies.map((w) => w.name).join(',')}`),
+        });
+        continue;
+      }
+      const isAlreadyPublished = await workspace.isPublished(targetVersion);
+      const greaterVersions = await workspace.listGreaterVersionsInRegistry(targetVersion);
+      if (isAlreadyPublished || greaterVersions.length) {
+        const error = isAlreadyPublished 
+          ? new CentipodError(CentipodErrorCode.ALREADY_PUBLISHED, 'Already published in registry')
+          : new CentipodError(CentipodErrorCode.FOUND_GREATER_VERSIONS_IN_REGISTRY, `Latest version in registry if ahead current target version. Latest version in registry: ${greaterVersions.reduce((acc, val) => semver.gt(acc, val) ? acc : val , '0.0.0')}`);
+        this._actions.add({
+          workspace,
+          currentVersion,
+          targetVersion,
+          error,
+        });
+        continue;
+      }
+      const hasChanged = await this._hasChangedSinceLastRelease(workspace);
+      this._actions.add({
+        workspace,
+        currentVersion: workspace.version,
+        targetVersion,
+        changed: hasChanged,
+      });
     }
     this._actionsResolved = true;
     return this._actions;
   }
 
-  private async _publish(workspace: Workspace, accessPublic = false) {
-    return await command(`yarn npm publish ${accessPublic ? '--access public' :''}`, { cwd: workspace.root });
-  }
-
-  private async _createTag(workspace: Workspace, version: string) {
-    await git.tag(this._getTagName(workspace, version))
-  }
-
-  private _getTagName(workspace: Workspace, version: string): string {
-    return `${workspace.name}-${version}`;
-  }
-
-  private async _shouldBePublished(workspace: Workspace): Promise<boolean> {
+  /**
+   * Check if a workspace source code has been modified since last release.
+   * If not skip publication
+   * @param workspace
+   * @returns 
+   */
+  private async _hasChangedSinceLastRelease(workspace: Workspace): Promise<boolean> {
     const version = workspace.version;
     if (!version) {
-      throw new Error(`Missing version field in ${workspace.name} package.json`);
+      throw new CentipodError(CentipodErrorCode.MISSING_VERSION, `Missing version field in ${workspace.name} package.json`);
     }
     const tag = this._getTagName(workspace, version);
     if (await this._tagExsist(tag)) {
@@ -185,6 +223,24 @@ export class Publish {
     } else {
       return true;
     }
+  }
+
+  private async _getPrivateDependencies(workspace: Workspace): Promise<Array<Workspace>> {
+    const deps = this._project.getTopologicallySortedWorkspaces(workspace);
+    return deps.filter((w) => w.private);
+  }
+
+  private async _publish(workspace: Workspace, access?: string, dry = false): Promise<ExecaReturnValue<string>> {
+    const cmd = dry ? 'yarn pack --dry-run' : `yarn npm publish ${access ? '--access ' + access :''}`;
+    return await command(cmd, { cwd: workspace.root, env: { ...process.env, FORCE_COLOR: '2' }, shell: process.platform === 'win32' });
+  }
+
+  private async _createTag(workspace: Workspace, version: string): Promise<void> {
+    await git.tag(this._getTagName(workspace, version))
+  }
+
+  private _getTagName(workspace: Workspace, version: string): string {
+    return `${workspace.name}-${version}`;
   }
 
   private async _tagExsist(tag: string): Promise<boolean> {

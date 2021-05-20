@@ -13,6 +13,7 @@ cli/src/app.js
 **/lib/
 **/coverage/
 **/dist
+**/.caches/
 
 .DS_Store
 **/.DS_Store

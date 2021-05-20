@@ -1,7 +1,6 @@
 {
-  "name": "@neoxia/centipod-cli",
-  "version": "0.0.1-alpha",
-  "private": true,
+  "name": "@centipod/cli",
+  "version": "0.0.1-alpha.0",
   "description": "Monorepo utils",
   "author": "Mario Arnautou",
   "license": "MIT",
@@ -15,7 +14,7 @@
     "build": "yarn tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@neoxia/centipod-core": "workspace:*",
+    "@centipod/core": "workspace:*",
     "chalk": "^4.1.1",
     "commander": "^7.2.0"
   },

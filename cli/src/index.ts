@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import chalk from 'chalk';
 import { Command } from 'commander';
+import { semanticRelease, semanticReleaseInit } from './cmd/semantic-release';
 import { affected } from './cmd/affected';
 import { isAffected } from './cmd/is-affected';
 import { publish } from './cmd/publish';
 import { run } from './cmd/run';
+import { logger } from './utils/logger';
 
 // TODO: Validate command input
 
@@ -19,8 +21,8 @@ const commandWrapper = async (fn: () => Promise<void> | void, keepOpen = false):
       process.exit(0);
     }
   } catch (e) {
-    console.error(chalk.bgRedBright('Uncaught error:'));
-    console.error(e);
+    logger.error(chalk.bgRedBright('Uncaught error:'));
+    logger.error(e);
     process.exit(1);
   }
 };
@@ -72,8 +74,9 @@ program
 
   program
   .command('publish <workspace> <bump> [identifier]')
+  .option('--access <access>')
   .option('--yes')
-  .option('--access-public')
+  .option('--dry')
   .description('publish package')
   .action(
     async (workspace, bump, identifier, options) =>
@@ -82,26 +85,39 @@ program
       }, true),
   );
 
-  program
-  .command('semantic-release [identifier]')
-  .description('publish affected packages using semantic versioning based on coventional changelog')
-  .action(
-    async () =>
-      await commandWrapper(async () => {
-        throw Error('Not implemented');
-        // TODO:
-        // Take all commits since last semantic-* tag (if not, publish version 1.0.0 of each pkg and tag semantic-1.0.0)
-        // Start a map with <pkg, 'none', 'patch', 'minor', 'major'>
-        // For each commit check which packages are affected
-        // If fix => for each affected pkg if < patch set patch
-        // If feat => for each affacted pkg if < minor set minor
-        // If BREAKING CHANGE => for each affected pkg if < major set major
-        // Per package bump are resolved !
-        // Now for each patch package, flag as patch all deps
-        // Then proceed as same for minor, and finally major
-        // Now that versions as been resolved, publish in topological order
-        // Note that optional identifier can be used to publish rc/alpha/beta/whatever (useful for automating release of candidates on branch next while publishing true releases from main/master)
-      }, true),
-  );
+  const semantic = program
+    .command('semantic-release [identifier]')
+    .option('--access <access>')
+    .option('--yes')
+    .option('--dry')
+    .description('publish affected packages using semantic versioning based on coventional changelog')
+    .action(
+      async (identifier) =>
+        await commandWrapper(async () => {
+          semanticRelease(identifier);
+          // TODO:
+          // Take all commits since last semantic-* tag (if not, publish version 1.0.0 of each pkg and tag semantic-1.0.0)
+          // Start a map with <pkg, 'none', 'patch', 'minor', 'major'>
+          // For each commit check which packages are affected
+          // If fix => for each affected pkg if < patch set patch
+          // If feat => for each affacted pkg if < minor set minor
+          // If BREAKING CHANGE => for each affected pkg if < major set major
+          // Per package bump are resolved !
+          // Now for each patch package, flag as patch all deps
+          // Then proceed as same for minor, and finally major
+          // Now that versions as been resolved, publish in topological order
+          // Note that optional identifier can be used to publish rc/alpha/beta/whatever (useful for automating release of candidates on branch next while publishing true releases from main/master)
+        }, true),
+    );
+
+  semantic
+    .command('init')
+    .description('publish affected packages using semantic versioning based on coventional changelog')
+    .action(
+      async (_opt, cmd) =>
+        await commandWrapper(async () => {
+          semanticReleaseInit(cmd.parent._optionValues);
+        }, true),
+    );
 
 (async (): Promise<unknown> => program.parseAsync(process.argv))();

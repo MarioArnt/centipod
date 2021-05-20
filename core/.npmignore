@@ -1,0 +1,8 @@
+src/
+.caches/
+.eslintrc
+.prettierrc
+centipod.json
+tsconfig.json
+tsconfig.eslint.json
+**/*.map

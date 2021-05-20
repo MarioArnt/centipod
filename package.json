@@ -9,9 +9,30 @@
   "description": "Monorepo utils",
   "author": "Mario Arnautou",
   "license": "MIT",
+  "scripts": {
+    "lint": "./cli/dist/index.js run lint --parallel",
+    "build": "./cli/dist/index.js run build"
+  },
   "devDependencies": {
+    "@commitlint/cli": "^12.1.4",
+    "@commitlint/config-conventional": "^12.1.4",
     "@types/node": "^15.0.1",
+    "@typescript-eslint/eslint-plugin": "^4.24.0",
+    "@typescript-eslint/parser": "^4.24.0",
+    "eslint": "^7.26.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0",
+    "lint-staged": "^11.0.0",
+    "prettier": "^2.3.0",
     "tslib": "^2.2.0",
     "typescript": "^4.2.4"
+  },
+  "lint-staged": {
+    "cli/**/*.{ts,tsx,json,yml}": [
+      "yarn workspace @centipod/cli run lint --fix"
+    ],
+    "core/**/*.{ts,tsx,json,yml}": [
+      "yarn workspace @centipod/core run lint --fix"
+    ]
   }
 }

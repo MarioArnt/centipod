@@ -1,0 +1,24 @@
+export enum CentipodErrorCode {
+  NOT_IN_VALID_YARN_PROJECT,
+  INVALIDATING_CACHE_FAILED,
+  NO_FILES_TO_CACHE,
+  MISSING_VERSION,
+  CANNOT_PUBLISH_OUTSIDE_PROJECT,
+  NO_SEMANTIC_RELEASE_TAGS_FOUND,
+  PUBLISHED_WORKSPACE_WITHOUT_BUMP,
+  PROJECT_NOT_RESOLVED,
+  CANNOT_PUBLISH_PRIVATE_PACKAGE,
+  HAS_PRIVATE_DEPENDENCY,
+  CANNOT_BUMP_VERSION,
+  ALREADY_PUBLISHED,
+  FOUND_GREATER_VERSIONS_IN_REGISTRY,
+  UNABLE_TO_LOAD_WORKSPACE
+}
+
+export class CentipodError extends Error {
+  readonly code: CentipodErrorCode;
+  constructor(code: CentipodErrorCode, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
