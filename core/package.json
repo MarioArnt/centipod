@@ -10,6 +10,7 @@
     "build": "yarn tsc -p tsconfig.json"
   },
   "dependencies": {
+    "conventional-commits-parser": "^3.2.1",
     "execa": "^5.0.0",
     "fast-glob": "^3.2.5",
     "hasha": "5.2.2",

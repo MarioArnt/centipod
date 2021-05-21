@@ -61,6 +61,7 @@ __metadata:
   dependencies:
     "@types/lodash": 4.14.168
     "@types/semver": ^7.3.5
+    conventional-commits-parser: ^3.2.1
     execa: ^5.0.0
     fast-glob: ^3.2.5
     hasha: 5.2.2
@@ -806,7 +807,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"conventional-commits-parser@npm:^3.0.0":
+"conventional-commits-parser@npm:^3.0.0, conventional-commits-parser@npm:^3.2.1":
   version: 3.2.1
   resolution: "conventional-commits-parser@npm:3.2.1"
   dependencies:

@@ -23,8 +23,7 @@ export const semanticRelease  = async (_identifier?: string): Promise<void> => {
   if (!semanticReleaseTags.length) {
     throw new CentipodError(CentipodErrorCode.NO_SEMANTIC_RELEASE_TAGS_FOUND, 'No semantic release tags found');
   }
-  const latest = semanticReleaseTags.sort()
-  process.exit(1);
+  const latest = semanticReleaseTags.sort((t1, t2) => Number(t2.split('@')[1]) - Number(t1.split('@')[1]));
   /*const log = await command(`git log --pretty=oneline --no-decorate ${rev1}..${rev2}`);
   const commits: Array<any> = [];
   for (const line of log.stdout.split('\n')) {
