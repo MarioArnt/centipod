@@ -39,7 +39,11 @@ export const semanticRelease  = async (project: Project, identifier?: string): P
   const latest = semanticReleaseTags.sort((t1, t2) => Number(t2.split('@')[1]) - Number(t1.split('@')[1]))[0];
   const log = await command(`git log --pretty=oneline --no-decorate ${latest}..`);
   const commits: Array<ICoventionalCommit> = [];
-  for (const line of log.stdout.split('\n')) {
+  const logLines = log.stdout.split('\n');
+  if (logLines.length === 0 || (logLines.length === 1 && !logLines[0])) {
+    throw new CentipodError(CentipodErrorCode.NOTHING_TO_DO, 'Nothing to do');
+  }
+  for (const line of logLines) {
     const hash = line.split(' ')[0];
     const revList = await command(`git rev-list --format=%B --max-count=1 ${hash}`)
     const message = revList.stdout.split('\n').slice(1).join('\n');

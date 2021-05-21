@@ -18,6 +18,7 @@ export const publish = async (workspaceName: string, bump: semver.ReleaseType, i
     logger.info('Identifier:', chalk.white.bold(identifier));
   }
   logger.seperator();
+  // TODO: Factorise with semantic-release
   const actions = await workspace.bumpVersions(bump, identifier);
   printActions(actions);
   logger.seperator();

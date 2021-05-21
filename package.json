@@ -12,10 +12,10 @@
   "scripts": {
     "lint": "yarn centipod run lint --parallel",
     "build": "yarn centipod run build",
-    "release": "yarn centipod semantic-release",
-    "prerelease:alpha": "yarn centipod semantic-release alpha",
-    "prerelease:beta": "yarn centipod semantic-release beta",
-    "prerelease:rc": "yarn centipod semantic-release rc"
+    "release": "yarn centipod semantic-release --access public",
+    "prerelease:alpha": "yarn centipod semantic-release alpha --access public",
+    "prerelease:beta": "yarn centipod semantic-release beta --access public",
+    "prerelease:rc": "yarn centipod semantic-release rc --access public"
   },
   "devDependencies": {
     "@centipod/cli": "^0.0.1-alpha.3",

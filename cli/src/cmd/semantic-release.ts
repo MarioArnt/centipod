@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import { createInterface } from 'readline';
 import { printEvent } from '../utils/print-publish-events';
 
+// TODO: move in utils
 interface IPublishOptions {
   yes?: boolean;
   access?: string;
@@ -78,6 +79,10 @@ export const semanticRelease  = async (identifier: string, options: IPublishOpti
     promptPublishConfirmation(publisher, options);
   } catch (e) {
     switch (e.code) {
+      case CentipodErrorCode.NOTHING_TO_DO:
+        logger.info('Nothing to do. Evry packages are already up-to-date');
+        process.exit(0);
+        break
       case CentipodErrorCode.NO_SEMANTIC_RELEASE_TAGS_FOUND:
         logger.error('Previous semantic release tag could not be found. Have you initialized semenatic-release with command "centipod semantic-release init <version>"');
         break
