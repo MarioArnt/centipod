@@ -41,7 +41,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@centipod/cli@workspace:cli":
+"@centipod/cli@^0.0.1-alpha.3, @centipod/cli@workspace:cli":
   version: 0.0.0-use.local
   resolution: "@centipod/cli@workspace:cli"
   dependencies:
@@ -55,7 +55,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@centipod/core@workspace:*, @centipod/core@workspace:core":
+"@centipod/core@^0.0.1-alpha.3, @centipod/core@workspace:*, @centipod/core@workspace:core":
   version: 0.0.0-use.local
   resolution: "@centipod/core@workspace:core"
   dependencies:
@@ -282,6 +282,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@neoxia/centipod@workspace:."
   dependencies:
+    "@centipod/cli": ^0.0.1-alpha.3
+    "@centipod/core": ^0.0.1-alpha.3
     "@commitlint/cli": ^12.1.4
     "@commitlint/config-conventional": ^12.1.4
     "@types/node": ^15.0.1

@@ -1,6 +1,6 @@
 {
   "name": "@neoxia/centipod",
-  "version": "0.0.1-alpha",
+  "version": "0.0.1-alpha.0",
   "private": true,
   "workspaces": [
     "core",
@@ -10,10 +10,16 @@
   "author": "Mario Arnautou",
   "license": "MIT",
   "scripts": {
-    "lint": "./cli/dist/index.js run lint --parallel",
-    "build": "./cli/dist/index.js run build"
+    "lint": "yarn centipod run lint --parallel",
+    "build": "yarn centipod run build",
+    "release": "yarn centipod semantic-release",
+    "prerelease:alpha": "yarn centipod semantic-release alpha",
+    "prerelease:beta": "yarn centipod semantic-release beta",
+    "prerelease:rc": "yarn centipod semantic-release rc"
   },
   "devDependencies": {
+    "@centipod/cli": "^0.0.1-alpha.3",
+    "@centipod/core": "^0.0.1-alpha.3",
     "@commitlint/cli": "^12.1.4",
     "@commitlint/config-conventional": "^12.1.4",
     "@types/node": "^15.0.1",
