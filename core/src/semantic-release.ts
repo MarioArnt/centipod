@@ -14,7 +14,7 @@ export const hasSemanticReleaseTags = async (): Promise<boolean> => {
 }
 
 export const createSemanticReleaseTag = async (): Promise<void> => {
-  await git.tag(`semantic-release@${new Date().toISOString()}`);
+  await git.tag(`semantic-release@${Date.now()}`);
   await git.push();
 };
 
