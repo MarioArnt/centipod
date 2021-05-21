@@ -59,8 +59,10 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@centipod/core@workspace:core"
   dependencies:
+    "@types/conventional-commits-parser": ^3.0.1
     "@types/lodash": 4.14.168
     "@types/semver": ^7.3.5
+    conventional-commits-parser: ^3.2.1
     execa: ^5.0.0
     fast-glob: ^3.2.5
     hasha: 5.2.2
@@ -322,6 +324,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/conventional-commits-parser@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "@types/conventional-commits-parser@npm:3.0.1"
+  dependencies:
+    "@types/node": "*"
+  checksum: bde96a682f8d051f509556c94b6be1d0a0ab9e6a0ddab8d11f553457bacfd6cbdb951abfc22936f41b7aa4a52d2dbcafdca5cbe73287a20f94ebdd82de870a46
+  languageName: node
+  linkType: hard
+
 "@types/json-schema@npm:^7.0.3":
   version: 7.0.7
   resolution: "@types/json-schema@npm:7.0.7"
@@ -340,6 +351,13 @@ __metadata:
   version: 1.2.1
   resolution: "@types/minimist@npm:1.2.1"
   checksum: 3a6f5fe35f1656b34a4ccd5a5db1c38509d8d5b59625865b8c2b997994fcb0cfde0d9af7c5507b95dc5a0a32a22886c189e505cd2e52a7ef36d3c9982f07ed5a
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:*":
+  version: 15.6.0
+  resolution: "@types/node@npm:15.6.0"
+  checksum: 54515155db4f5d18e36725dafa477e0cee664b5a807560a026692c2c2251034675d9ef55a15bc44b7694a4a2e4866b9ca063872915b34a0564ab955b0da101eb
   languageName: node
   linkType: hard
 
@@ -806,7 +824,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"conventional-commits-parser@npm:^3.0.0":
+"conventional-commits-parser@npm:^3.0.0, conventional-commits-parser@npm:^3.2.1":
   version: 3.2.1
   resolution: "conventional-commits-parser@npm:3.2.1"
   dependencies:

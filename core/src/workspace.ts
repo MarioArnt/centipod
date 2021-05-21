@@ -229,4 +229,14 @@ export class Workspace {
     manifest.version = version;
     await fs.writeFile(join(this.root, 'package.json'), JSON.stringify(manifest, null, 2));
   }
+
+  async getLastReleaseOnRegistry(): Promise<string> {
+    const infos = await this.getNpmInfos();
+    return infos.versions.reduce((acc, val) => semver.gt(acc, val) ? acc : val, '0.0.0');
+  }
+
+  async getLastReleaseTag(): Promise<string> {
+    const tags = await git.tags();
+    return tags.all.filter((t) => t.startsWith(this.name)).reduce((acc, val) => semver.gt(acc, val.substr(this.name.length + 1)) ? acc : val.substr(this.name.length + 1), '0.0.0');
+  }
 }

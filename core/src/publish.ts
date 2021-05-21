@@ -89,7 +89,12 @@ export class Publish {
     return this._preparePublish(workspace, bump, identifier);
   }
 
-  release(options = { access: 'public', dry: false }): Observable<PublishEvent> {
+  setActions(actions: PublishActions): void {
+    this._actions = actions;
+    this._actionsResolved = true;
+  }
+
+  release(options: { access?: string, dry: boolean } = { access: undefined, dry: false }): Observable<PublishEvent> {
     return new Observable((obs) => {
       this.determineActions().then(async (actions) => {
         obs.next({ type: PublishEventType.ACTIONS_RESOLVED, actions });

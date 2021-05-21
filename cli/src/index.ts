@@ -92,9 +92,9 @@ program
     .option('--dry')
     .description('publish affected packages using semantic versioning based on coventional changelog')
     .action(
-      async (identifier) =>
+      async (identifier, _options, cmd) =>
         await commandWrapper(async () => {
-          semanticRelease(identifier);
+          semanticRelease(identifier, cmd._optionValues);
           // TODO:
           // Take all commits since last semantic-* tag (if not, publish version 1.0.0 of each pkg and tag semantic-1.0.0)
           // Start a map with <pkg, 'none', 'patch', 'minor', 'major'>
