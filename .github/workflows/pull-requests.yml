@@ -1,12 +1,9 @@
-name: Push on master
-on:
-  push:
-    branches:
-      - main
+name: Pull requests
+on: pull_request
 jobs:
-  TestAllProjects:
+  TestAffectedProjects:
     runs-on: ubuntu-latest
-    name: 'Test all projects'
+    name: 'Test affected projects'
     steps:
       - uses: actions/checkout@v2
       - name: Use Node.js
