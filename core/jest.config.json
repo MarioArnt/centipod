@@ -16,5 +16,5 @@
   "collectCoverageFrom": [
     "<rootDir>/src/**/*.ts"
   ],
-  "coverageReporters": ["json", "html"]
+  "coverageReporters": ["json", "html", "lcov"]
 }

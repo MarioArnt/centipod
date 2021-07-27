@@ -25,3 +25,12 @@ jobs:
         run: yarn build
       - name: Test packages
         run: yarn test
+  Sonarcloud:
+    name: 'SonarCloud Analysis'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
