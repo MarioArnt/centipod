@@ -67,6 +67,8 @@ const promptPublishConfirmation = (publisher: Publish, options: IPublishOptions)
 }
 
 export const semanticRelease  = async (identifier: string, options: IPublishOptions): Promise<void> => {
+  // TODO: Throw if git working directory not cleaned
+  // TODO: Enforce branach to main/next etc... Configure in some rc file
   const project =  await Project.loadProject(resloveProjectRoot());
   logger.lf();
   logger.info(logger.centipod, chalk.white.bold('Initializing new semantic-release update'));
