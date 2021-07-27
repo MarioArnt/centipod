@@ -159,6 +159,7 @@ export class Workspace {
         now = Date.now();
         const result = await command(_cmd, {
           cwd: this.root,
+          all: true,
           env: { ...process.env, FORCE_COLOR: '2' },
           shell: process.platform === 'win32',
         });

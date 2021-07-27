@@ -38,8 +38,7 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
       logger.lf();
       logger.info(chalk.cyan('>'), error.command);
       logger.lf();
-      logger.log(error.stdout);
-      logger.log(error.stderr);
+      logger.log(error.all);
     } else {
       logger.error(error);
     }
@@ -67,8 +66,8 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
             logger.lf();
             logger.info(chalk.cyan('>'), command.command);
             logger.lf();
-            if (command.stdout) {
-              logger.log(command.stdout);
+            if (command.all) {
+              logger.log(command.all);
             } else {
               logger.info('Process exited with status', command.exitCode);
             }
