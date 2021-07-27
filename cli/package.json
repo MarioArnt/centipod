@@ -11,7 +11,7 @@
     "cpd": "dist/index.js"
   },
   "scripts": {
-    "build": "yarn tsc -p tsconfig.json"
+    "build": "../node_modules/.bin/tsc -p tsconfig.json"
   },
   "dependencies": {
     "@centipod/core": "workspace:*",

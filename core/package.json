@@ -7,7 +7,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "yarn tsc -p tsconfig.json"
+    "build": "../node_modules/.bin/tsc -p tsconfig.json"
   },
   "dependencies": {
     "conventional-commits-parser": "^3.2.1",
