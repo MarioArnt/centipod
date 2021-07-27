@@ -13,5 +13,12 @@
     "src": [
       "src/**/*.ts"
     ]
+  },
+  "test": {
+    "cmd": "../node_modules/.bin/jest",
+    "src": [
+      "src/**/*.ts",
+      "test/**/*.ts"
+    ]
   }
 }

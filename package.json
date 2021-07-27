@@ -12,6 +12,7 @@
   "scripts": {
     "lint": "yarn centipod run lint --parallel",
     "build": "yarn centipod run build",
+    "test": "yarn centipod run test",
     "release": "yarn centipod semantic-release --access public",
     "prerelease:alpha": "yarn centipod semantic-release alpha --access public",
     "prerelease:beta": "yarn centipod semantic-release beta --access public",

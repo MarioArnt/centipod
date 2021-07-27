@@ -73,7 +73,7 @@ export class Workspace {
         if (dep === this) {
           yield workspace;
           break;
-        } 
+        }
       }
     }
   }
@@ -183,14 +183,14 @@ export class Workspace {
       throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, 'Cannot publish outside a project');
     }
     this._publish = new Publish(this.project);
-    return this._publish.determineActions(this, bump, identifier);   
+    return this._publish.determineActions(this, bump, identifier);
   }
 
   publish(options = { access: 'public', dry: false }): Observable<PublishEvent> {
     if (!this._publish) {
       throw new CentipodError(CentipodErrorCode.PUBLISHED_WORKSPACE_WITHOUT_BUMP, 'You must bump versions before publishing');
     }
-    return this._publish.release(options);   
+    return this._publish.release(options);
   }
 
   async getNpmInfos(): Promise<INpmInfos> {

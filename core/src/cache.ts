@@ -8,6 +8,7 @@ import { isEqual } from 'lodash';
 import { ICommandResult } from './process';
 import { CentipodError, CentipodErrorCode } from './error';
 import { IConfigEntry } from './config';
+import {logger} from "./logger";
 
 export class Cache {
   constructor (
@@ -48,12 +49,10 @@ export class Cache {
       return JSON.parse(output.toString());
     } catch (e) {
       if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
-        // eslint-disable-next-line no-console
-        console.warn(chalk.yellow(`Patterns ${this.config.src.join('|')} has no match: ignoring cache`));
+        logger.warn(chalk.yellow(`Patterns ${this.config.src.join('|')} has no match: ignoring cache`));
         return null;
       }
-      // eslint-disable-next-line no-console
-      console.warn('Cannot read from cache', e);
+      logger.warn('Cannot read from cache', e);
       return null;
     }
   }
@@ -76,8 +75,7 @@ export class Cache {
         }
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('Error writing cache', e);
+      logger.warn('Error writing cache', e);
     }
   }
 
