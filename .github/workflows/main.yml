@@ -88,9 +88,12 @@ jobs:
         with:
           gpg-private-key: ${{ secrets.GPG_SECRET_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git-user-signingkey: true
+          git-commit-gpgsign: true
       - name: Configure git
         run:  |
           git config --global user.email "mario.arnautou@gmail.com"
           git config --global user.name "Mario Arnautou"
+          git config --global commit.gpgsign true
       - name: Semantic relase
         run: yarn prerelease:alpha --yes
