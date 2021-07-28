@@ -89,4 +89,4 @@ jobs:
         with:
           name: lib
       - name: Semantic relase
-        run: yarn prerelease:alpha
+        run: yarn prerelease:alpha --yes
