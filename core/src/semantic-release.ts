@@ -112,9 +112,9 @@ export const semanticRelease  = async (project: Project, identifier?: string): P
       bumps.set(workspace, 'prerelease');
     } else if (identifier && shouldMajor) {
       bumps.set(workspace, 'premajor');
-    } else if (identifier && shouldMajor) {
+    } else if (identifier && shouldMinor) {
       bumps.set(workspace, 'preminor');
-    } else if (identifier && shouldMajor) {
+    } else if (identifier && shouldPatch) {
       bumps.set(workspace, 'prepatch');
     }
     const bump = bumps.get(workspace);
@@ -145,7 +145,7 @@ export const semanticRelease  = async (project: Project, identifier?: string): P
   return publisher;
 };
 
-/* 
+/*
 SEMVER CHEATSHEET
 
 Release on prerelease
