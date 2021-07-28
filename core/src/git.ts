@@ -34,11 +34,11 @@ export const git = {
       await this.git.fetch(['--tags']);
     }
     // Get tags
-    return await this.git.tags();
+    return this.git.tags();
   },
 
   async tag(version: string): Promise<string> {
-    return await this.git.tag([version]);
+    return this.git.tag([version]);
   },
 
   async commit(files: string[], message: string): Promise<void> {
