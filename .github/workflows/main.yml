@@ -34,7 +34,9 @@ jobs:
         name: Upload compiled packages
         with:
           name: lib
-          path: '*/{lib,dist}/**/*'
+          path: |
+            core/lib
+            cli/dist
   Sonarcloud:
     name: 'SonarCloud Analysis'
     needs: TestAllProjects
