@@ -25,13 +25,41 @@ jobs:
         run: yarn build
       - name: Test packages
         run: yarn test
+      - uses: actions/upload-artifact@v2
+        name: Upload coverage reports
+        with:
+          name: lvcov
+          path: '*/coverage/lcov.info'
   Sonarcloud:
     name: 'SonarCloud Analysis'
+    needs: TestAllProjects
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: SonarCloud Scan
+      - name: Download coverage reports
+        uses: actions/download-artifact@v2
+        with:
+          name: lcov
+      - name: Analyze workspace centipod
         uses: SonarSource/sonarcloud-github-action@master
+        with:
+          fetch-depth: 0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Analyze workspace @centipod/core
+        uses: sonarsource/sonarcloud-github-action@master
+        with:
+          fetch-depth: 0
+          projectBaseDir: core
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Analyze workspace @centipod/cli
+        uses: sonarsource/sonarcloud-github-action@master
+        with:
+          fetch-depth: 0
+          projectBaseDir: cli
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
