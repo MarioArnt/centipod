@@ -28,7 +28,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         name: Upload coverage reports
         with:
-          name: lvcov
+          name: lcov
           path: '*/coverage/lcov.info'
   Sonarcloud:
     name: 'SonarCloud Analysis'
