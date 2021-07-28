@@ -81,5 +81,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: lib
+      - name: Add NPM token
+        run: 'echo "npmAuthToken: ${{ secrets.NPM_TOKEN }}" >> .yarnrc.yml'
       - name: Semantic relase
         run: yarn prerelease:alpha --yes
