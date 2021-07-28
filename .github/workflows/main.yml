@@ -47,13 +47,6 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: lcov
-      - name: Analyze workspace centipod
-        uses: SonarSource/sonarcloud-github-action@master
-        with:
-          fetch-depth: 0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - name: Analyze workspace @centipod/core
         uses: sonarsource/sonarcloud-github-action@master
         with:
