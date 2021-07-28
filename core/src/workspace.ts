@@ -96,7 +96,7 @@ export class Workspace {
   }
 
   private _publish: Publish | undefined;
-  private _npmInfos: INpmInfos | undefined;
+  private _npmInfos: INpmInfos | undefined;
 
   private async _testAffected(rev1: string, rev2?: string, patterns: string[] = ['**']): Promise<boolean> {
     // Compute diff
