@@ -25,7 +25,7 @@ export class Cache {
   }
 
   get config(): IConfigEntry {
-    return this._workspace.config[this._cmd];
+    return this.workspace.config[this._cmd];
   }
 
   get workspace(): Workspace {
@@ -57,25 +57,18 @@ export class Cache {
     }
   }
 
-  async write(output: Array<ICommandResult<string>>): Promise<void> {
+  async write(output: Array<ICommandResult>): Promise<void> {
     try {
       const checksums = new Checksum(this)
       const toWrite = this._checksums ?? await checksums.calculate();
       await this._createCacheDirectory();
-      try {
-        await Promise.all([
-          fs.writeFile(checksums.checksumPath, JSON.stringify(toWrite)),
-          fs.writeFile(this.outputPath, JSON.stringify(output)),
-        ]);
-      } catch (e) {
-        if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
-          await this.invalidate();
-        } else {
-          throw e;
-        }
-      }
+      await Promise.all([
+        fs.writeFile(checksums.checksumPath, JSON.stringify(toWrite)),
+        fs.writeFile(this.outputPath, JSON.stringify(output)),
+      ]);
     } catch (e) {
       logger.warn('Error writing cache', e);
+      await this.invalidate();
     }
   }
 
