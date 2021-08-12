@@ -34,7 +34,7 @@ export class Checksum {
       globs: config.src.join(','),
     };
     await Promise.all(src.map(async (path) => {
-      // FIXME: Batch to avoid EMFILE
+      // TODO: Batch to avoid EMFILE
       checksums[path] = await fromFile(path, { algorithm: 'sha256' });
     }));
     return checksums;

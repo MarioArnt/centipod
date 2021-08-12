@@ -18,7 +18,7 @@ export class Project extends Workspace {
 
   // Statics
   static async loadProject(root: string): Promise<Project> {
-    const prj = new Project(await this.loadPackage(root), root, await this._loadConfig(root));
+    const prj = new Project(await this.loadPackage(root), root, await this.loadConfig(root));
     await prj.loadWorkspaces();
     return prj;
   }
@@ -47,23 +47,23 @@ export class Project extends Workspace {
   }
 
   *leaves(): Generator<Workspace, void>  {
-    for (const worskpace of this.workspaces.values()) {
+    for (const workspace of this.workspaces.values()) {
       let isLeaf = true;
-      for (const dep of worskpace.dependencies()) {
+      for (const dep of workspace.dependencies()) {
         isLeaf = false;
         break;
       }
-      if (isLeaf) yield worskpace;
+      if (isLeaf) yield workspace;
     }
   }
 
   *roots(): Generator<Workspace, void>  {
-    for (const worskpace of this.workspaces.values()) {
+    for (const workspace of this.workspaces.values()) {
       let isRoot = true;
-      for (const dep of worskpace.dependents()) {
+      for (const dep of workspace.dependents()) {
         isRoot = false;
       }
-      if (isRoot) yield worskpace;
+      if (isRoot) yield workspace;
     }
   }
 
@@ -81,7 +81,7 @@ export class Project extends Workspace {
       for (const root of this.roots()) {
         visitWorkspace(root);
       }
-    } 
+    }
     return Array.from(sortedWorkspaces);
   }
 

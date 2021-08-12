@@ -24,17 +24,17 @@ export class Workspace {
   ) {}
 
   // Statics
-  protected static async loadPackage(root: string): Promise<Package> {
+  static async loadPackage(root: string): Promise<Package> {
     const file = join(root, 'package.json');
     const data = await fs.readFile(file, 'utf-8');
     return JSON.parse(data);
   }
 
   static async loadWorkspace(root: string, project?: Project): Promise<Workspace> {
-    return new Workspace(await this.loadPackage(root), root, await this._loadConfig(root), project);
+    return new Workspace(await this.loadPackage(root), root, await this.loadConfig(root), project);
   }
 
-  protected static async _loadConfig(root: string): Promise<Config> {
+  static async loadConfig(root: string): Promise<Config> {
     const file = join(root, 'centipod.json');
     try {
       const data = await fs.readFile(file, 'utf-8');
