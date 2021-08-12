@@ -105,12 +105,16 @@ export class Workspace {
       : await git.diff('--name-only', rev1, '--', this.root);
 
     // No pattern
-    if (patterns.length === 0 && patterns[0] === '**') {
+    if (patterns.length === 0 || patterns[0] === '**') {
       return diffs.length > 0;
     }
-
-    const rel = relative(git.root, this.root);
-    const files = patterns.map((pattern) => glob(join(rel, pattern))).reduce((acc, val) => acc = acc.concat(val), []);
+    if (!this.project) {
+      throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, `Cannot load dependencies of workspace ${this.name}: loaded outside of a project`)
+    }
+    const files = patterns
+      .map((pattern) => glob(join(this.root, pattern)))
+      .reduce((acc, val) => acc = acc.concat(val), [])
+      .map(absolute => (relative(String(this.project?.root), absolute)));
     return diffs.some((diff) => files.includes(diff));
   }
 
@@ -118,17 +122,18 @@ export class Workspace {
     tested.add(this);
 
     // Test if is affected
-    const affected = await this._testAffected(rev1, rev2, patterns);
-    if (affected) return true;
+    const isAffected = await this._testAffected(rev1, rev2, patterns);
+    if (isAffected) return true;
 
     // Test dependencies if are affected
     for (const dep of this.dependencies()) {
+      console.debug('testing', dep.name);
       // Check if already tested
       if (tested.has(dep)) continue;
 
       // Test
-      const affected = await dep._testDepsAffected(tested, rev1, rev2, patterns);
-      if (affected) return true;
+      const isAffected = await dep._testDepsAffected(tested, rev1, rev2, patterns);
+      if (isAffected) return true;
     }
 
     return false;

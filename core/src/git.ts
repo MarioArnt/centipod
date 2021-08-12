@@ -5,17 +5,16 @@ export interface GitTagsOptions {
   fetch?: boolean;
 }
 
+const simpleGitInstance = simpleGit();
+
+export const fixture = {
+  simpleGitInstance,
+}
+
 // Namespace
 export const git = {
   // Attributes
-  git: simpleGit(),
-  root: process.cwd(),
-
-  // Methods
-  setup(root: string): void {
-    this.git = simpleGit({ baseDir: root });
-    this.root = root;
-  },
+  git: simpleGitInstance,
 
   // Commands
   async fetch(...args: string[]): Promise<FetchResult> {
@@ -23,6 +22,7 @@ export const git = {
   },
 
   async diff(...args: string[]): Promise<string[]> {
+    console.log(args);
     const res = await this.git.diff(args);
     // Parse result
     return res.split('\n').filter(f => f);

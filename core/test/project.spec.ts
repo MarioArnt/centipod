@@ -114,7 +114,6 @@ describe('[class] Project', () => {
     it('should stop to the target workspace if given', async () => {
       const project = await Project.loadProject(root);
       const workspaces = project.getTopologicallySortedWorkspaces(project.getWorkspace('@org/app-b') as Workspace);
-      const appA = workspaces.find((w) => w.name === '@org/app-a');
       expect(workspaces).toHaveLength(4);
       expect(workspaces.indexOf(project.getWorkspace('@org/app-b') as Workspace)).toBeGreaterThan(workspaces.indexOf(project.getWorkspace('@org/api') as Workspace))
       expect(workspaces.indexOf(project.getWorkspace('@org/app-b') as Workspace)).toBeGreaterThan(workspaces.indexOf(project.getWorkspace('@org/workspace-a') as Workspace))
