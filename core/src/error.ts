@@ -1,3 +1,5 @@
+import {ICommandResult, IRunCommandErrorEvent} from "./process";
+
 export enum CentipodErrorCode {
   NOT_IN_VALID_YARN_PROJECT,
   INVALIDATING_CACHE_FAILED,
@@ -24,4 +26,13 @@ export class CentipodError extends Error {
     super(message);
     this.code = code;
   }
+}
+
+export const isProcessError = (error: unknown): error is ICommandResult => {
+  return (error as ICommandResult)?.stderr != null;
+};
+
+export const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
+  const candidate = (error as IRunCommandErrorEvent);
+  return !!candidate?.type && !!candidate?.error;
 }

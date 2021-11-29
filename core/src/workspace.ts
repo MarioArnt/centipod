@@ -17,7 +17,7 @@ import semver from 'semver';
 export class Workspace {
   // Constructor
   constructor(
-    protected readonly pkg: Package,
+    readonly pkg: Package,
     readonly root: string,
     protected readonly _config: Config,
     readonly project?: Project
@@ -168,7 +168,7 @@ export class Workspace {
       await cache.write(results);
       return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
     } catch (e) {
-      cache.invalidate();
+      await cache.invalidate();
       throw e;
     }
   }

@@ -3,6 +3,7 @@ export * from './workspace';
 export * from './project';
 export * from './root';
 export * from './process';
+export * from './runner';
 export * from './publish';
 export * from './semantic-release';
 export * from './error';

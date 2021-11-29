@@ -1,4 +1,4 @@
-import { ICommandResult, IRunCommandErrorEvent, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@centipod/core";
+import { isNodeEvent, isProcessError, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@centipod/core";
 import chalk from 'chalk';
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
@@ -22,13 +22,7 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
     revisions = { rev1, rev2 };
   }
   logger.seperator();
-  const isProcessError = (error: unknown): error is ICommandResult => {
-    return (error as ICommandResult)?.stderr != null;
-  };
-  const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
-    const candidate = (error as IRunCommandErrorEvent);
-    return !!candidate?.type && !!candidate?.error;
-  }
+
   const printError = (error: unknown): void => {
     if (isNodeEvent(error)) {
       logger.lf();
@@ -46,7 +40,14 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
   const failures = new Set<Workspace>();
   const now = Date.now();
   let nbTargets = 0;
-  project.runCommand(cmd, { parallel: options.parallel, force: options.force, affected: revisions, to }).subscribe(
+
+  const runOptions =  options.parallel ? {
+    mode: 'parallel' as const, force: options.force, affected: revisions, workspaces: to ? [to] : undefined,
+  } : {
+    mode: 'topological' as const, force: options.force, affected: revisions, to,
+  };
+
+  project.runCommand(cmd, runOptions).subscribe(
       (event) => {
         if (isTargetResolvedEvent(event)) {
           if (!event.targets.length) {

@@ -2,7 +2,7 @@
 import { Workspace } from './workspace';
 import { join } from 'path';
 import { sync as glob } from 'fast-glob';
-import { IRunOptions, Runner } from './runner';
+import { RunOptions, Runner } from './runner';
 import { Publish } from './publish';
 import { ReleaseType } from 'semver';
 import { CentipodError, CentipodErrorCode } from './error';
@@ -11,7 +11,7 @@ import { RunCommandEvent } from './process';
 
 export class Project extends Workspace {
   // Attributes
-  private readonly _workspaces = new Map<string, Workspace>();
+  protected readonly _workspaces = new Map<string, Workspace>();
   readonly project = this;
   // Getters
   get workspaces(): Map<string, Workspace> { return this._workspaces }
@@ -24,7 +24,7 @@ export class Project extends Workspace {
   }
 
   // Methods
-  private async loadWorkspaces(): Promise<void> {
+  async loadWorkspaces(): Promise<void> {
     // Load workspaces
     if (this.pkg.workspaces && this.pkg.workspaces.length > 0) {
       const patterns = this.pkg.workspaces.map(wks => glob(join(this.root, wks, 'package.json'))).reduce((acc, val) => acc = acc.concat(val), []);
@@ -85,7 +85,7 @@ export class Project extends Workspace {
     return Array.from(sortedWorkspaces);
   }
 
-  runCommand(cmd: string, options: Partial<IRunOptions>): Observable<RunCommandEvent> {
+  runCommand(cmd: string, options: RunOptions): Observable<RunCommandEvent> {
     const runner = new Runner(this);
     return runner.runCommand(cmd, options);
   }
