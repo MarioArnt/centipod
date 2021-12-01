@@ -17,7 +17,8 @@ export enum CentipodErrorCode {
   UNABLE_TO_LOAD_WORKSPACE,
   TAG_AND_REGISTRY_VERSIONS_MISMATCH,
   CANNOT_DETERMINE_BUMP,
-  NOTHING_TO_DO
+  NOTHING_TO_DO,
+  BAD_REVISION,
 }
 
 export class CentipodError extends Error {

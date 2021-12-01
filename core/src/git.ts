@@ -1,4 +1,5 @@
 import simpleGit, { FetchResult, TagResult } from 'simple-git';
+import { command } from "execa"
 
 // Types
 export interface GitTagsOptions {
@@ -48,5 +49,14 @@ export const git = {
   async push(): Promise<void> {
     await this.git.push();
     await this.git.pushTags();
+  },
+
+  async revisionExists(rev: string): Promise<boolean> {
+    try {
+      await command(`git cat-file -t ${rev}`);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 };

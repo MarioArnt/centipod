@@ -1,17 +1,17 @@
 // Class
-import { Project } from './project';
-import { promises as fs } from 'fs';
-import { join, relative } from 'path';
-import { INpmInfos, Package } from './package';
-import { git } from './git';
-import { sync as glob } from 'fast-glob';
-import { command } from 'execa';
-import { Config } from './config';
-import { ICommandResult, IProcessResult } from './process';
-import { Cache } from './cache';
-import { Publish, PublishActions, PublishEvent } from './publish';
-import { Observable } from 'rxjs';
-import { CentipodError, CentipodErrorCode } from './error';
+import {Project} from './project';
+import {promises as fs} from 'fs';
+import {join, relative} from 'path';
+import {INpmInfos, Package} from './package';
+import {git} from './git';
+import {sync as glob} from 'fast-glob';
+import {command} from 'execa';
+import {Config} from './config';
+import {ICommandResult, IProcessResult} from './process';
+import {Cache} from './cache';
+import {Publish, PublishActions, PublishEvent} from './publish';
+import {Observable} from 'rxjs';
+import {CentipodError, CentipodErrorCode} from './error';
 import semver from 'semver';
 
 export class Workspace {
@@ -63,19 +63,28 @@ export class Workspace {
     }
   }
 
-  *dependents(): Generator<Workspace, void> {
+  get descendants(): Map<string, Workspace> {
+    const descendants = new Map<string, Workspace>();
+    const visitWorkspace = (wks: Workspace): void => {
+      for (const dep of wks.dependencies()) {
+        visitWorkspace(dep);
+        descendants.set(dep.name, dep);
+      }
+    }
+    visitWorkspace(this);
+    return descendants;
+  }
+
+  get ancestors(): Map<string, Workspace> {
+    const ancestors = new Map<string, Workspace>();
     if (!this.project) {
       throw new CentipodError(CentipodErrorCode.PROJECT_NOT_RESOLVED, `Cannot load dependencies of workspace ${this.name}: loaded outside of a project`)
     }
     for (const workspace of this.project.workspaces.values()) {
       if (workspace === this) continue;
-      for (const dep of workspace.dependencies()) {
-        if (dep === this) {
-          yield workspace;
-          break;
-        }
-      }
+      if (workspace.descendants.has(this.name)) ancestors.set(workspace.name, workspace);
     }
+    return ancestors;
   }
 
   // Properties
@@ -134,7 +143,22 @@ export class Workspace {
     return false;
   }
 
+  private async _checkRevision(rev: string): Promise<void> {
+    const isValid = await git.revisionExists(rev);
+    if (!isValid) {
+      throw new CentipodError(CentipodErrorCode.BAD_REVISION, `Bad revision: ${rev}`);
+    }
+  }
+
+  private async _checkRevisions(rev1: string, rev2?: string): Promise<void> {
+    await this._checkRevision(rev1);
+    if (rev2) {
+      await this._checkRevision(rev2);
+    }
+  }
+
   async isAffected(rev1: string, rev2?: string, patterns: string[] = ['**'], topological = true): Promise<boolean> {
+    await this._checkRevisions(rev1, rev2);
     if (!topological) {
       return await this._testAffected(rev1, rev2, patterns);
     }

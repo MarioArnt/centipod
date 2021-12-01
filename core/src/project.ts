@@ -46,25 +46,22 @@ export class Project extends Workspace {
     return this._workspaces.get(name) || null;
   }
 
-  *leaves(): Generator<Workspace, void>  {
+  get leaves(): Map<string, Workspace>  {
+    const leaves = new Map<string, Workspace>();
     for (const workspace of this.workspaces.values()) {
-      let isLeaf = true;
-      for (const dep of workspace.dependencies()) {
-        isLeaf = false;
-        break;
-      }
-      if (isLeaf) yield workspace;
+      const isLeaf = !workspace.descendants.size;
+      if (isLeaf) leaves.set(workspace.name, workspace);
     }
+    return leaves;
   }
 
-  *roots(): Generator<Workspace, void>  {
+  get roots(): Map<string, Workspace>  {
+    const roots = new Map<string, Workspace>();
     for (const workspace of this.workspaces.values()) {
-      let isRoot = true;
-      for (const dep of workspace.dependents()) {
-        isRoot = false;
-      }
-      if (isRoot) yield workspace;
+      const isRoot = !workspace.ancestors.size;
+      if (isRoot) roots.set(workspace.name, workspace);
     }
+    return roots;
   }
 
   getTopologicallySortedWorkspaces(to?: Workspace): Workspace[] {
@@ -78,11 +75,11 @@ export class Project extends Workspace {
     if (to) {
       visitWorkspace(to);
     } else {
-      for (const root of this.roots()) {
+      for (const root of this.roots.values()) {
         visitWorkspace(root);
       }
     }
-    return Array.from(sortedWorkspaces);
+    return [...sortedWorkspaces];
   }
 
   runCommand(cmd: string, options: RunOptions): Observable<RunCommandEvent> {

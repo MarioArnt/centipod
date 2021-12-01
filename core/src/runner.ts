@@ -100,7 +100,7 @@ export class Runner {
       await Promise.all(Array.from(eligible).map(async (workspace) => {
         const hasCommand = await workspace.hasCommand(cmd);
         let isTarget = hasCommand;
-        if (options.affected?.rev1) {
+        if (hasCommand && options.affected?.rev1) {
           const patterns = workspace.config[cmd].src;
           const isAffected = await workspace.isAffected(options.affected.rev1, options.affected.rev2, patterns, options.mode === 'topological');
           isTarget = hasCommand && isAffected;
