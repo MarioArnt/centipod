@@ -50,14 +50,14 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
   project.runCommand(cmd, runOptions).subscribe(
       (event) => {
         if (isTargetResolvedEvent(event)) {
-          if (!event.targets.length) {
+          if (!event.targets.some((target) => target.hasCommand)) {
             logger.lf();
             logger.error(logger.centipod, logger.failed, `No project found for command "${cmd}"`);
             logger.lf();
             process.exit(1);
           }
           logger.info('Targets resolved:');
-          logger.info(event.targets.map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n'));
+          logger.info(event.targets.filter((t) => t.hasCommand).map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.workspace.name)}`).join('\n'));
           logger.seperator();
           nbTargets = event.targets.length;
         } else if (isNodeSucceededEvent(event)) {

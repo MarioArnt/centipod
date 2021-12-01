@@ -1,7 +1,9 @@
 import { from, Observable } from "rxjs";
 import { mergeAll } from "rxjs/operators";
 import {
+  IResolvedTarget,
   isNodeErroredEvent,
+  isNodeSkippedEvent,
   isNodeStartedEvent,
   isNodeSucceededEvent,
   RunCommandEvent,
@@ -35,7 +37,7 @@ export class Runner {
     private readonly _concurrency: number = 4,
   ) {}
 
-  runCommand<T = unknown>(cmd: string, options: RunOptions, data?: T): Observable<RunCommandEvent<T>> {
+  runCommand(cmd: string, options: RunOptions): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       this._resolveTargets(cmd, options).then((targets) => {
         // TODO: Validate configurations for each targets
@@ -44,25 +46,31 @@ export class Runner {
           obs.complete();
         } else if (isTopological(options)) {
           const runNextWorkspace = (): void => {
+            const runNext = (): void => {
+              targets.shift();
+              if (targets.length) {
+                runNextWorkspace();
+              } else {
+                obs.complete();
+              }
+            }
             this._runForWorkspace(targets[0], cmd, options.force).subscribe(
               (evt) => {
                 if (isNodeSucceededEvent(evt)) {
-                  obs.next({...evt, data});
+                  obs.next(evt);
                   if (!options.force && !evt.result.fromCache) {
                     options.force = true;
                   }
-                  targets.shift();
-                  if (targets.length) {
-                    runNextWorkspace();
-                  } else {
-                    obs.complete();
-                  }
+                  runNext();
                 } else if (isNodeErroredEvent(evt)) {
-                  Promise.all(targets.map(t => t.invalidate(cmd))).finally(() => {
-                    obs.error({...evt, data});
+                  Promise.all(targets.map(t => t.workspace.invalidate(cmd))).finally(() => {
+                    obs.error(evt);
                   });
-                } else if (isNodeStartedEvent(evt)) {
-                  obs.next({...evt, data});
+                } else if (isNodeSkippedEvent(evt)) {
+                  obs.next(evt);
+                  runNext();
+                } else {
+                  obs.next(evt);
                 }
               },
               (error) => obs.error(error),
@@ -71,8 +79,8 @@ export class Runner {
           runNextWorkspace();
         } else {
           from(targets.map((w) => this._runForWorkspace(w, cmd, !!options.force))).pipe(mergeAll(this._concurrency)).subscribe(
-            (evt) => obs.next({...evt, data}),
-            (err) => obs.error({...err, data}),
+            (evt) => obs.next(evt),
+            (err) => obs.error(err),
             () => obs.complete(),
           )
         }
@@ -80,33 +88,37 @@ export class Runner {
     });
   }
 
-  private _runForWorkspace(workspace: Workspace, cmd: string, force: boolean): Observable<RunCommandEvent> {
+  private _runForWorkspace(target: IResolvedTarget, cmd: string, force: boolean): Observable<RunCommandEvent> {
     return new Observable((obs) => {
-      obs.next({ type: RunCommandEventEnum.NODE_STARTED, workspace });
-      workspace.run(cmd, force)
-        .then((result) => {
-          obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace });
-        }).catch((error) => {
+      const workspace = target.workspace;
+      if (target.affected && target.hasCommand) {
+        obs.next({ type: RunCommandEventEnum.NODE_STARTED, workspace });
+        workspace.run(cmd, force)
+          .then((result) => {
+            obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace });
+          }).catch((error) => {
           obs.next({ type: RunCommandEventEnum.NODE_ERRORED, error, workspace })
         }).finally(() => {
           obs.complete();
         });
+      } else {
+        obs.next({ type: RunCommandEventEnum.NODE_SKIPPED, ...target });
+        obs.complete();
+      }
     });
   }
 
-  private async _resolveTargets(cmd: string, options: RunOptions): Promise<Workspace[]> {
-    const findTargets = async (eligible: Workspace[]): Promise<Workspace[]> => {
-      const targets: Workspace[] = [];
+  private async _resolveTargets(cmd: string, options: RunOptions): Promise<Array<IResolvedTarget>> {
+    const findTargets = async (eligible: Workspace[]): Promise<Array<IResolvedTarget>> => {
+      const targets: Array<IResolvedTarget> = [];
       await Promise.all(Array.from(eligible).map(async (workspace) => {
         const hasCommand = await workspace.hasCommand(cmd);
-        let isTarget = hasCommand;
         if (hasCommand && options.affected?.rev1) {
           const patterns = workspace.config[cmd].src;
           const isAffected = await workspace.isAffected(options.affected.rev1, options.affected.rev2, patterns, options.mode === 'topological');
-          isTarget = hasCommand && isAffected;
-        }
-        if (isTarget) {
-          targets.push(workspace);
+          targets.push({ workspace, affected: isAffected, hasCommand})
+        } else {
+          targets.push({ workspace, affected: true, hasCommand})
         }
       }));
       return targets;

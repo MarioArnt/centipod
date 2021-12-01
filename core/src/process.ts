@@ -16,35 +16,42 @@ export enum RunCommandEventEnum {
   NODE_PROCESSED,
   NODE_ERRORED,
   NODE_STARTED,
+  NODE_SKIPPED,
 }
 
-export interface ITargetsResolvedEvent<T = unknown> {
+export interface IResolvedTarget {
+  workspace: Workspace;
+  affected: boolean;
+  hasCommand: boolean;
+}
+
+export interface ITargetsResolvedEvent {
   type: RunCommandEventEnum.TARGETS_RESOLVED;
-  targets: Workspace[];
-  data?: T;
+  targets: IResolvedTarget[];
 }
 
-export interface IRunCommandStartedEvent<T = unknown> {
+export interface INodeSkippedEvent extends IResolvedTarget {
+  type: RunCommandEventEnum.NODE_SKIPPED;
+}
+
+export interface IRunCommandStartedEvent {
   type: RunCommandEventEnum.NODE_STARTED;
   workspace: Workspace;
-  data?: T;
 }
 
-export interface IRunCommandSuccessEvent<T = unknown> {
+export interface IRunCommandSuccessEvent {
   type: RunCommandEventEnum.NODE_PROCESSED;
   result: IProcessResult;
   workspace: Workspace;
-  data?: T;
 }
 
-export interface IRunCommandErrorEvent<T = unknown> {
+export interface IRunCommandErrorEvent {
   type: RunCommandEventEnum.NODE_ERRORED;
   error: unknown;
   workspace: Workspace;
-  data?: T;
 }
 
-export type RunCommandEvent<T = unknown> = IRunCommandStartedEvent<T> | ITargetsResolvedEvent<T> | IRunCommandSuccessEvent<T> | IRunCommandErrorEvent<T>;
+export type RunCommandEvent = IRunCommandStartedEvent | ITargetsResolvedEvent | IRunCommandSuccessEvent | IRunCommandErrorEvent | INodeSkippedEvent;
 
 export const isTargetResolvedEvent = (event: RunCommandEvent): event is  ITargetsResolvedEvent => event.type === RunCommandEventEnum.TARGETS_RESOLVED;
 
@@ -53,3 +60,4 @@ export const isNodeSucceededEvent = (event: RunCommandEvent): event is  IRunComm
 export const isNodeErroredEvent = (event: RunCommandEvent): event is  IRunCommandErrorEvent => event.type === RunCommandEventEnum.NODE_ERRORED;
 
 export const isNodeStartedEvent = (event: RunCommandEvent): event is  IRunCommandStartedEvent => event.type === RunCommandEventEnum.NODE_STARTED;
+export const isNodeSkippedEvent = (event: RunCommandEvent): event is  IRunCommandStartedEvent => event.type === RunCommandEventEnum.NODE_SKIPPED;
