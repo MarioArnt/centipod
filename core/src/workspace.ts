@@ -6,7 +6,7 @@ import {INpmInfos, Package} from './package';
 import {git} from './git';
 import {sync as glob} from 'fast-glob';
 import {command} from 'execa';
-import {Config} from './config';
+import { IConfig, loadConfig} from './config';
 import {ICommandResult, IProcessResult} from './process';
 import {Cache} from './cache';
 import {Publish, PublishActions, PublishEvent} from './publish';
@@ -19,7 +19,7 @@ export class Workspace {
   constructor(
     readonly pkg: Package,
     readonly root: string,
-    protected readonly _config: Config,
+    protected readonly _config: IConfig,
     readonly project?: Project
   ) {}
 
@@ -34,17 +34,9 @@ export class Workspace {
     return new Workspace(await this.loadPackage(root), root, await this.loadConfig(root), project);
   }
 
-  static async loadConfig(root: string): Promise<Config> {
+  static async loadConfig(root: string): Promise<IConfig> {
     const file = join(root, 'centipod.json');
-    try {
-      const data = await fs.readFile(file, 'utf-8');
-      return JSON.parse(data);
-    } catch (e) {
-      if (e.code === 'ENOENT') {
-        return {};
-      }
-      throw e;
-    }
+    return loadConfig(file);
   }
 
   // Methods
@@ -88,7 +80,7 @@ export class Workspace {
   }
 
   // Properties
-  get config(): Config {
+  get config(): IConfig {
     return this._config;
   }
 
