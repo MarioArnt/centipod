@@ -37,6 +37,8 @@ export const loadConfig = async (path: string): Promise<IConfig> => {
   if (config.extends) {
     const extending = join(dirname(path), ...config.extends.split('/'));
     if (extending === path) {
+      // TODO: Throw properly
+      // Throw also if not exists
       throw new Error('Cannot extend himself');
     }
     const parentConfig = await loadConfig(extending);

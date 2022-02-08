@@ -161,7 +161,7 @@ export class Workspace {
     return !!this.config[cmd];
   }
 
-  async run(cmd: string, force = false): Promise<IProcessResult> {
+  async run(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
     let now = Date.now();
     const cache = new Cache(this, cmd);
     const cachedOutputs = await cache.read();
@@ -171,15 +171,21 @@ export class Workspace {
     try {
       const results: ICommandResult[] = [];
       const cmds = this.config[cmd].cmd;
+      const _args = Array.isArray(args) ? args : [args];
+      let idx = 0;
       for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
         now = Date.now();
-        const result = await command(_cmd, {
+        const _currentArgs = _args[idx] || '';
+        const _fullCmd = [_cmd, _currentArgs].join(' ');
+        const result = await command(_fullCmd, {
           cwd: this.root,
           all: true,
           env: { ...process.env, FORCE_COLOR: '2' },
           shell: process.platform === 'win32',
+          stdio,
         });
         results.push({...result, took: Date.now() - now });
+        idx++;
       }
       await cache.write(results);
       return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };

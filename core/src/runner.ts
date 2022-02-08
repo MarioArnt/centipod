@@ -16,6 +16,7 @@ export interface ICommonRunOptions{
   mode: 'parallel' | 'topological';
   force: boolean;
   affected?: { rev1: string, rev2: string};
+  stdio?: 'pipe' | 'inherit';
 }
 
 export interface ITopologicalRunOptions extends ICommonRunOptions {
@@ -37,7 +38,7 @@ export class Runner {
     private readonly _concurrency: number = 4,
   ) {}
 
-  runCommand(cmd: string, options: RunOptions): Observable<RunCommandEvent> {
+  runCommand(cmd: string, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       this._resolveTargets(cmd, options).then((targets) => {
         // TODO: Validate configurations for each targets
@@ -54,7 +55,7 @@ export class Runner {
                 obs.complete();
               }
             }
-            this._runForWorkspace(targets[0], cmd, options.force).subscribe(
+            this._runForWorkspace(targets[0], cmd, options.force, args, options.stdio).subscribe(
               (evt) => {
                 if (isNodeSucceededEvent(evt)) {
                   obs.next(evt);
@@ -78,7 +79,7 @@ export class Runner {
           }
           runNextWorkspace();
         } else {
-          from(targets.map((w) => this._runForWorkspace(w, cmd, !!options.force))).pipe(mergeAll(this._concurrency)).subscribe(
+          from(targets.map((w) => this._runForWorkspace(w, cmd, options.force, args, options.stdio))).pipe(mergeAll(this._concurrency)).subscribe(
             (evt) => obs.next(evt),
             (err) => obs.error(err),
             () => obs.complete(),
@@ -88,12 +89,12 @@ export class Runner {
     });
   }
 
-  private _runForWorkspace(target: IResolvedTarget, cmd: string, force: boolean): Observable<RunCommandEvent> {
+  private _runForWorkspace(target: IResolvedTarget, cmd: string, force: boolean, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       const workspace = target.workspace;
       if (target.affected && target.hasCommand) {
         obs.next({ type: RunCommandEventEnum.NODE_STARTED, workspace });
-        workspace.run(cmd, force)
+        workspace.run(cmd, force, args, stdio)
           .then((result) => {
             obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace });
           }).catch((error) => {
