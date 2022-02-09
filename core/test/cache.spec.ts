@@ -1,4 +1,6 @@
+// @ts-ignore
 import {Cache} from "../src/cache";
+// @ts-ignore
 import {CentipodErrorCode, CentipodError, Workspace} from "../src";
 import {spy, stub } from "sinon";
 import {Checksum} from "../src/checksum";
@@ -392,7 +394,7 @@ describe('[class] Cache manager', () => {
         access.restore();
         unlink.restore();
         expect(e instanceof CentipodError).toBe(true);
-        expect(e.code).toBe(CentipodErrorCode.INVALIDATING_CACHE_FAILED);
+        expect((e as CentipodError).code).toBe(CentipodErrorCode.INVALIDATING_CACHE_FAILED);
       }
     });
     it('should throw a fatal error and warn user if caches exist but cannot be removed', async () => {
@@ -414,7 +416,7 @@ describe('[class] Cache manager', () => {
         access.restore();
         unlink.restore();
         expect(e instanceof CentipodError).toBe(true);
-        expect(e.code).toBe(CentipodErrorCode.INVALIDATING_CACHE_FAILED);
+        expect((e as CentipodError).code).toBe(CentipodErrorCode.INVALIDATING_CACHE_FAILED);
       }
     });
   });

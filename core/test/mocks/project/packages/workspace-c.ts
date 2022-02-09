@@ -11,3 +11,16 @@ export const pkg = {
     "typescript": "^4.2.4"
   }
 };
+
+export const centipod = {
+  "targets": {
+    "build": {
+      "cmd": [
+        "../node_modules/.bin/tsc --build"
+      ],
+      "src": [
+        "src/**/*.ts"
+      ]
+    },
+  }
+}

@@ -1,4 +1,13 @@
-import { CentipodErrorCode, Project, resloveProjectRoot, semanticRelease as prepareRelease, hasSemanticReleaseTags, createSemanticReleaseTag, Publish } from "@centipod/core";;
+import {
+  CentipodErrorCode,
+  Project,
+  resloveProjectRoot,
+  semanticRelease as prepareRelease,
+  hasSemanticReleaseTags,
+  createSemanticReleaseTag,
+  Publish,
+  CentipodError,
+} from '@centipod/core';
 import { logger } from '../utils/logger';
 import { printActions } from '../utils/print-actions';
 import chalk from 'chalk';
@@ -80,7 +89,7 @@ export const semanticRelease  = async (identifier: string, options: IPublishOpti
     printSummary(publisher);
     promptPublishConfirmation(publisher, options);
   } catch (e) {
-    switch (e.code) {
+    switch ((e as CentipodError).code) {
       case CentipodErrorCode.NOTHING_TO_DO:
         logger.info('Nothing to do. Evry packages are already up-to-date');
         process.exit(0);

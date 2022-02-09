@@ -48,7 +48,7 @@ export class Cache {
       const output = await fs.readFile(this.outputPath);
       return JSON.parse(output.toString());
     } catch (e) {
-      if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
+      if ((e as CentipodError).code === CentipodErrorCode.NO_FILES_TO_CACHE) {
         logger.warn(chalk.yellow(`Patterns ${this.config.src.join('|')} has no match: ignoring cache`));
         return null;
       }
@@ -80,7 +80,7 @@ export class Cache {
           await fs.access(path, F_OK);
           return true;
         } catch (e) {
-          if (e.code === 'ENOENT') {
+          if ((e as { code: string }).code === 'ENOENT') {
             return false;
           }
           throw e;

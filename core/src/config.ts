@@ -22,7 +22,7 @@ export const readConfigFile = async (path: string): Promise<unknown> => {
     const data = await fs.readFile(path, 'utf-8');
     return JSON.parse(data);
   } catch (e) {
-    if (e.code === 'ENOENT') {
+    if ((e as { code: string }).code === 'ENOENT') {
       return {};
     }
     throw e;

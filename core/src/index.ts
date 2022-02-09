@@ -7,3 +7,4 @@ export * from './runner';
 export * from './publish';
 export * from './semantic-release';
 export * from './error';
+export * from './targets';

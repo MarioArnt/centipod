@@ -1,8 +1,10 @@
 import {SinonStub, stub} from "sinon";
+// @ts-ignore
 import {Project, Workspace} from "../src";
 import fastGlob from 'fast-glob';
 import {CentipodError, CentipodErrorCode} from "../src";
 import { join } from 'path';
+// @ts-ignore
 import {mockedPackages} from "./mocks/project/package-json";
 
 describe('[class] Project', () => {
@@ -62,8 +64,8 @@ describe('[class] Project', () => {
       } catch (e) {
         expect(e).toBeTruthy();
         expect(e instanceof CentipodError).toBe(true);
-        expect(e.message.includes('Invalid package JSON')).toBe(true);
-        expect(e.code).toBe(CentipodErrorCode.UNABLE_TO_LOAD_WORKSPACE);
+        expect((e as CentipodError).message.includes('Invalid package JSON')).toBe(true);
+        expect((e as CentipodError).code).toBe(CentipodErrorCode.UNABLE_TO_LOAD_WORKSPACE);
       }
     });
   });
@@ -81,7 +83,7 @@ describe('[class] Project', () => {
     it('should yield all leaves', async () => {
       const project = await Project.loadProject(root);
       const leaves: Workspace[] = [];
-      for (const leaf of project.leaves()) leaves.push(leaf)
+      for (const leaf of project.leaves.values()) leaves.push(leaf)
       expect(leaves).toHaveLength(2);
       expect(leaves.some(l => l.name === '@org/workspace-c')).toBe(true);
       expect(leaves.some(l => l.name === '@org/workspace-a')).toBe(true);
@@ -91,7 +93,7 @@ describe('[class] Project', () => {
     it('should yield all roots', async () => {
       const project = await Project.loadProject(root);
       const roots: Workspace[] = [];
-      for (const wks of project.roots()) roots.push(wks)
+      for (const wks of project.roots.values()) roots.push(wks)
       expect(roots).toHaveLength(2);
       expect(roots.some(l => l.name === '@org/app-a')).toBe(true);
       expect(roots.some(l => l.name === '@org/app-b')).toBe(true);

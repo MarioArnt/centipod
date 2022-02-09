@@ -224,7 +224,7 @@ export class Workspace {
         return parsedInfos;
       } catch (e) {
         try {
-          if (JSON.parse(e.stdout).name === 1) { // Not found
+          if (JSON.parse((e as any).stdout).name === 1) { // Not found
             this._npmInfos = { name: this.name, versions: []};
             return { name: this.name, versions: []};
           }

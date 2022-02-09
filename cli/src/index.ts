@@ -59,12 +59,13 @@ program
 
   program
   .command('run <cmd>')
-  .option('-p, --parallel', 'Run asad')
-  .option('-t, --topological', 'Edeede')
-  .option('--force', 'deddede')
-  .option('--to <workspace>', 'ddedede')
-  .option('--affected <rev1>..[rev2]', 'deddede')
-  .description('start microlambda services')
+  .option('-p, --parallel', 'run command in parallel in all workspaces')
+  .option('-t, --topological', 'run command in dependency before')
+  .option('--force', 'ignore cached outputs and checksums')
+  .option('--watch', 'watch sources and run the command again on changes')
+  .option('--to <workspace>', 'run the command only to a given workspace')
+  .option('--affected <rev1>..[rev2]', 'only run command on workspaces affected between two revisions')
+  .description('run a centipod target through the dependencies graph')
   .action(
     async (cmd, options) =>
       await commandWrapper(async () => {

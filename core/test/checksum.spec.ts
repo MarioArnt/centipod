@@ -1,7 +1,9 @@
 import { stub } from "sinon";
 import { promises as fs } from "fs";
+// @ts-ignore
 import {Cache} from "../src/cache";
 import {Checksum} from "../src/checksum";
+// @ts-ignore
 import {CentipodError, CentipodErrorCode, Workspace} from "../src";
 import fastGlob from 'fast-glob';
 import hasha from 'hasha';
@@ -151,7 +153,7 @@ describe('[class] Checksum manager', () => {
       } catch (e) {
         glob.restore();
         expect(e instanceof CentipodError).toBe(true);
-        expect(e.code).toBe(CentipodErrorCode.NO_FILES_TO_CACHE);
+        expect((e as CentipodError).code).toBe(CentipodErrorCode.NO_FILES_TO_CACHE);
       }
     });
     it.todo('should split processing in one-thousand elements batch to avoid EMFILE error');

@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
 
-export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
+export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, watch?: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
   // TODO: Validate options (conflict between parallel/topolical)
   const project =  await Project.loadProject(resloveProjectRoot());
   const to = options.to ? resolveWorkspace(project, options.to) : undefined;
