@@ -1,6 +1,6 @@
 import { IResolvedTarget } from './process';
 import { Workspace } from './workspace';
-import { isTopological, RunOptions } from './runner';
+import { isTopological, ITopologicalRunOptions, RunOptions } from './runner';
 import { Project } from './project';
 
 export type OrderedTargets = IResolvedTarget[][];
@@ -34,8 +34,8 @@ export class TargetsResolver {
     return targets;
   }
 
-  private async _recursivelyResolveTargets(cmd: string, options: RunOptions): Promise<OrderedTargets> {
-    const targets = await this._findTargets(Array.from(this._project.workspaces.values()), cmd, options);
+  private async _recursivelyResolveTargets(cmd: string, options: ITopologicalRunOptions): Promise<OrderedTargets> {
+    const targets = await this._findTargets(Array.from(this._project.getTopologicallySortedWorkspaces(options.to)), cmd, options);
     // Find targets we will not run command on as it is either unaffected or it has not the command
     const inactiveTargets = targets.filter((t) => !t.hasCommand || !t.affected);
     // We also store the names for better performance in further recursion

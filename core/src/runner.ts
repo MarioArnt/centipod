@@ -8,7 +8,7 @@ import {
 import { Project } from "./project";
 import { Workspace } from "./workspace";
 import { watch } from 'chokidar';
-import { TargetsResolver } from './targets';
+import { OrderedTargets, TargetsResolver } from './targets';
 
 export interface ICommonRunOptions{
   mode: 'parallel' | 'topological';
@@ -66,11 +66,16 @@ export class Runner {
     });
   }*/
 
-  private _scheduleTasks(cmd: string, targets: IResolvedTarget[], options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
+  private _scheduleTasks(cmd: string, targets: OrderedTargets, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
     if (isTopological(options)) {
-      return from(targets.map((w) => this._runForWorkspace(targets, w, cmd, options.force, 'topological', args, options.stdio))).pipe(concatAll());
+      const steps$: Array< Observable<RunCommandEvent>> = [];
+      for (const step of targets) {
+        const tasks$ = step.map((w) => this._runForWorkspace(targets, w, cmd, options.force, 'topological', args, options.stdio));
+        steps$.push(from(tasks$).pipe(mergeAll(this._concurrency)))
+      }
+      return from(steps$).pipe(concatAll());
     } else {
-      return from(targets.map((w) => this._runForWorkspace(targets, w, cmd, options.force, 'parallel', args, options.stdio))).pipe(mergeAll(this._concurrency));
+      return from(targets[0].map((w) => this._runForWorkspace(targets, w, cmd, options.force, 'parallel', args, options.stdio))).pipe(mergeAll(this._concurrency));
     }
   }
 
@@ -79,7 +84,7 @@ export class Runner {
       const targets = new TargetsResolver(this._project);
       targets.resolve(cmd, options).then((targets) => {
         // TODO: Validate configurations for each targets
-        obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets });
+        obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets: targets.flat() });
         if (!targets.length) {
           return obs.complete();
         }
@@ -93,25 +98,42 @@ export class Runner {
     });
   }
 
-  private _runForWorkspace(targets: IResolvedTarget[], target: IResolvedTarget, cmd: string, force: boolean, mode: 'topological' | 'parallel', args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Observable<RunCommandEvent> {
+  private _runForWorkspace(targets: OrderedTargets, target: IResolvedTarget, cmd: string, force: boolean, mode: 'topological' | 'parallel', args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       const workspace = target.workspace;
       if (target.affected && target.hasCommand) {
         obs.next({ type: RunCommandEventEnum.NODE_STARTED, workspace });
+        console.debug('Running command for', workspace.name);
         workspace.run(cmd, force, args, stdio)
           .then((result) => {
+            console.debug('Output for', workspace.name, ':', result.commands[0].all);
             // If result does not come from cache, that means source have changed and we must invalidate cache of every subsequent node
             if (mode === 'topological' && !result.fromCache) {
-              Runner._invalidateSubsequentWorkspaceCache(targets, target, cmd).then(() => {
+              Runner._invalidateSubsequentWorkspaceCache(targets, target, cmd).finally(() => {
                 obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace });
               });
             } else {
               obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace });
             }
           }).catch((error) => {
-          Promise.all(targets.map(t => t.workspace.invalidate(cmd))).finally(() => {
-            obs.next({ type: RunCommandEventEnum.NODE_ERRORED, error, workspace })
-          });
+          // If an error occurs invalidate cache from node (and subsequent if topological)
+          console.debug('Error for', workspace.name, ':', error.all);
+          console.debug({ mode });
+          if (mode === 'topological') {
+            console.debug('Invalidating cache');
+            Runner._invalidateSubsequentWorkspaceCache(targets, target, cmd)
+              .catch((err) => {
+                console.debug(err);
+              })
+              .finally(() => {
+              console.debug('Emitting error');
+              obs.error({ type: RunCommandEventEnum.NODE_ERRORED, error, workspace })
+            });
+          } else {
+            workspace.invalidate(cmd).finally(() => {
+              obs.next({ type: RunCommandEventEnum.NODE_ERRORED, error, workspace })
+            })
+          }
         }).finally(() => {
           obs.complete();
         });
@@ -122,10 +144,16 @@ export class Runner {
     });
   }
 
-  private static async _invalidateSubsequentWorkspaceCache(targets: IResolvedTarget[], target: IResolvedTarget, cmd: string): Promise<void> {
+  private static async _invalidateSubsequentWorkspaceCache(targets: IResolvedTarget[][], current: IResolvedTarget, cmd: string): Promise<void> {
     const invalidate$: Array<Promise<void>> = [];
-    for (let idx = targets.indexOf(target); idx < targets.length; idx++) {
-      invalidate$.push(targets[idx].workspace.invalidate(cmd));
+    let isAfterCurrent = false;
+    for (const step of targets) {
+      if (step.includes(current)) {
+        isAfterCurrent = true;
+      }
+      if (isAfterCurrent) {
+        invalidate$.push(...step.map((t) => t.workspace.invalidate(cmd)));
+      }
     }
     await Promise.all(invalidate$);
   }

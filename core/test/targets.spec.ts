@@ -39,7 +39,8 @@ describe('[class] TargetsResolver', () => {
       expect(targets[3]).toHaveLength(1);
       expect(targets[3][0].workspace.name).toBe('@org/app-b');
     });
-    it('should resolve all targets that have the command - topological & partial', async () => {
+    it('should resolve all targets that have the command - topological & partial (--to)');
+    it('should resolve all targets that have the command - topological & partial (no command)', async () => {
       const resolver = new TargetsResolver(project);
       const targets = await resolver.resolve('lint', {
         mode: 'topological',
