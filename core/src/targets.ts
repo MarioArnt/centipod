@@ -22,7 +22,7 @@ export class TargetsResolver {
   private async _findTargets(eligible: Workspace[], cmd: string, options: RunOptions): Promise<Array<IResolvedTarget>> {
     const targets: Array<IResolvedTarget> = [];
     await Promise.all(Array.from(eligible).map(async (workspace) => {
-      const hasCommand = await workspace.hasCommand(cmd);
+      const hasCommand = workspace.hasCommand(cmd);
       if (hasCommand && options.affected?.rev1) {
         const patterns = workspace.config[cmd].src;
         const isAffected = await workspace.isAffected(options.affected.rev1, options.affected.rev2, patterns, options.mode === 'topological');

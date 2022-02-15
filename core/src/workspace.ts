@@ -157,11 +157,67 @@ export class Workspace {
     return await this._testDepsAffected(new Set(), rev1, rev2, patterns);
   }
 
-  async hasCommand(cmd: string): Promise<boolean> {
+  hasCommand(cmd: string): boolean {
     return !!this.config[cmd];
   }
 
+  runObs(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Observable<IProcessResult> {
+    return new Observable<IProcessResult>((obs) => {
+      let now = Date.now();
+      const cache = new Cache(this, cmd);
+      const runCommands = async () => {
+        const results: ICommandResult[] = [];
+        const cmds = this.config[cmd].cmd;
+        const _args = Array.isArray(args) ? args : [args];
+        let idx = 0;
+        for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
+          now = Date.now();
+          const _currentArgs = _args[idx] || '';
+          const _fullCmd = [_cmd, _currentArgs].join(' ');
+          const result = await command(_fullCmd, {
+            cwd: this.root,
+            all: true,
+            env: { ...process.env, FORCE_COLOR: '2' },
+            shell: process.platform === 'win32',
+            stdio,
+          });
+          results.push({...result, took: Date.now() - now });
+          idx++;
+        }
+        return results;
+      }
+      cache.read().then((cachedOutputs) => {
+        if (!force && cachedOutputs) {
+          obs.next({ commands: cachedOutputs, overall: Date.now() - now, fromCache: true });
+          obs.complete();
+        } else {
+          runCommands()
+            .then((results) => {
+              obs.next({ commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) });
+              cache.write(results).finally(() => obs.complete())
+            })
+            .catch((err) => {
+              obs.error(err);
+              cache.invalidate().finally(() => obs.complete())
+          })
+        }
+      }).catch((err) => {
+        // Cannot read cache
+        runCommands()
+          .then((results) => {
+            obs.next({ commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) });
+            cache.write(results).finally(() => obs.complete())
+          })
+          .catch((err) => {
+            obs.error(err);
+            cache.invalidate().finally(() => obs.complete())
+          })
+      });
+    });
+  }
+
   async run(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
+    console.debug('NOT STUBBED');
     let now = Date.now();
     const cache = new Cache(this, cmd);
     const cachedOutputs = await cache.read();
