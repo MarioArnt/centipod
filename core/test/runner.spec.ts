@@ -176,8 +176,166 @@ describe('[class] Runner', () => {
         expect(e).toBeFalsy();
       }
     });
-    it.todo('should invalidate cache of subsequent workspaces if a command fail in a workspace - topological');
-    it.todo('should invalidate cache of subsequent workspaces if a command must be re-run in a workspace - topological');
-
+    it('should terminate and invalidate cache of subsequent workspaces if a command fail in a workspace - topological', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 14, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 7, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 13, fromCache: true },
+        { resolve: false, args: ['build', false, [], 'pipe'], delay: 23 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 12 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 4 },
+      ]);
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('build', {
+          mode: 'topological',
+          force: false,
+        });
+        await expectObservable(execution$, '0-33-11-33-12555-X', {
+          1: ['@org/workspace-b', '@org/workspace-a', '@org/workspace-c'],
+          2: ['@org/app-a'],
+          3: ['@org/workspace-b', '@org/app-a', '@org/workspace-a', '@org/workspace-c'],
+          5: ['@org/app-a', '@org/api', '@org/app-b'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it('should invalidate cache of subsequent workspaces if a command must be re-run in a workspace - topological', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 14, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 7, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 13, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 23 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 12 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 4 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('build', {
+          mode: 'topological',
+          force: false,
+        });
+        await expectObservable(execution$, '0-33-11-33-1155-3-15-3-1', {
+          1: ['@org/workspace-b', '@org/app-a', '@org/workspace-a',  '@org/app-b',  '@org/workspace-c', '@org/api'],
+          3: ['@org/workspace-b', '@org/app-a', '@org/workspace-a',  '@org/app-b',  '@org/workspace-c', '@org/api'],
+          5: ['@org/api', '@org/app-b', '@org/app-b'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it('should terminate on cache invalidation error  - parallel', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubs.invalidate?.rejects();
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 14 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 8 },
+        { resolve: false, args: ['lint', false, [], 'pipe'], delay: 23 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        });
+        await expectObservable(execution$, '0-444333-1126-X', {
+          1: ['@org/workspace-a', '@org/app-b'],
+          2: ['@org/api'],
+          4: ['@org/workspace-c', '@org/workspace-b', '@org/app-a'],
+          3: ['@org/workspace-a', '@org/app-b', '@org/api'],
+          5: [],
+          6: ['@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it('should terminate on cache invalidation error  - topological', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ],
+        [
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 14, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 7, fromCache: true },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 13, fromCache: true },
+        { resolve: false, args: ['build', false, [], 'pipe'], delay: 23 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 12 },
+        { resolve: true, args: ['build', false, [], 'pipe'], delay: 4 },
+      ]);
+      stubs.invalidate?.onCall(0).resolves();
+      stubs.invalidate?.onCall(1).rejects();
+      stubs.invalidate?.onCall(2).resolves();
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('build', {
+          mode: 'topological',
+          force: false,
+        });
+        await expectObservable(execution$, '0-33-11-33-12556-X', {
+          1: ['@org/workspace-b', '@org/workspace-a', '@org/workspace-c'],
+          2: ['@org/app-a'],
+          3: ['@org/workspace-b', '@org/app-a', '@org/workspace-a', '@org/workspace-c'],
+          5: ['@org/app-a', '@org/app-b'],
+          6: ['@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
   });
 });

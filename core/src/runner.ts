@@ -1,6 +1,13 @@
 import { concat, from, Observable, of } from 'rxjs';
 import { catchError, concatAll, concatMap, map, mergeAll } from 'rxjs/operators';
-import { IProcessResult, IResolvedTarget, RunCommandEvent, RunCommandEventEnum } from './process';
+import {
+  IErrorInvalidatingCacheEvent,
+  IProcessResult,
+  IResolvedTarget,
+  IRunCommandErrorEvent,
+  RunCommandEvent,
+  RunCommandEventEnum,
+} from './process';
 import { Project } from './project';
 import { Workspace } from './workspace';
 import { OrderedTargets, TargetsResolver } from './targets';
@@ -26,6 +33,11 @@ type SucceededExecution = {status: 'ok', result: IProcessResult, target: IResolv
 type CaughtProcessExecution =  SucceededExecution | FailedExecution;
 
 const isFailedExecution = (execution: CaughtProcessExecution): execution is FailedExecution => { return execution.status === 'ko' }
+
+const isRunCommandErroredEvent = (error: unknown): error is RunCommandEvent => {
+  const _error = error as (IRunCommandErrorEvent | IErrorInvalidatingCacheEvent);
+  return (_error.type === RunCommandEventEnum.ERROR_INVALIDATING_CACHE || _error.type === RunCommandEventEnum.NODE_ERRORED) && !!_error.workspace;
+}
 
 export type RunOptions = IParallelRunOptions | ITopologicalRunOptions;
 
@@ -72,21 +84,15 @@ export class Runner {
   }
 
   runCommand(cmd: string, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
-    console.debug('OBSERVABLE DEFINED');
     return new Observable((obs) => {
-      console.debug('OBSERVABLE SUBSCRIBED');
       const targets = new TargetsResolver(this._project);
-      console.debug('RESOLVING TARGETS');
       targets.resolve(cmd, options).then((targets) => {
-        console.debug('TARGETS RESOLVED');
         // TODO: Validate configurations for each targets
-        console.debug('targets resolved', targets);
         obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets: targets.flat() });
         if (!targets.length) {
           return obs.complete();
         }
         const tasks$ = this._scheduleTasks(cmd, targets, options, args);
-        console.debug('Tasks scheduled', tasks$);
         tasks$.subscribe(
           (evt) => obs.next(evt),
           (err) => obs.error(err),
@@ -106,39 +112,60 @@ export class Runner {
     stdio: 'pipe' | 'inherit' = 'pipe'
   ): Observable<RunCommandEvent> {
     const executions = new Set<CaughtProcessExecution>();
-    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, targets, w, cmd, force, mode, args, stdio));
+    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),
     );
     return new Observable<RunCommandEvent>((obs) => {
+      const resolveInvalidations$ = (): Observable<RunCommandEvent> => {
+        // When execution step is completed or errored, perform required cache invalidations
+        // Invalidate cache of every errored nodes
+        const invalidations$: Array<Observable<RunCommandEvent>> = [];
+        let hasAtLeastOneError = false;
+        let cachedInvalidated = false;
+        let current: IResolvedTarget | null = null;
+        for (const execution of executions) {
+          current = execution.target;
+          if (isFailedExecution(execution)) {
+            hasAtLeastOneError = true;
+            invalidations$.push(Runner._invalidateCache(execution.target.workspace, cmd));
+          } else if (!execution.result.fromCache) {
+            cachedInvalidated = true;
+          }
+        }
+        // In topological mode, if an error happened during the step
+        // or a cache has been invalidated invalidate all ancestors cache.
+        if (mode === 'topological' && (hasAtLeastOneError || cachedInvalidated) && current) {
+          invalidations$.push(Runner._invalidateSubsequentWorkspaceCache(targets, current, cmd));
+        }
+        return from(invalidations$).pipe(concatAll())
+      }
       step$.subscribe(
         (evt) => obs.next(evt),
-        (err) => obs.error(err),
-        () => {
-          console.debug('STEP COMPLETED', executions);
-          // When execution step is completed, performed required cache invalidations
-          // Invalidate cache of every errored nodes
-          const invalidations$: Array<Observable<RunCommandEvent>> = [];
-          let hasAtLeastOneError = false;
-          let cachedInvalidated = false;
-          let current: IResolvedTarget | null = null;
-          for (const execution of executions) {
-            current = execution.target;
-            if (isFailedExecution(execution)) {
-              hasAtLeastOneError = true;
-              invalidations$.push(Runner._invalidateCache(execution.target.workspace, cmd));
-            } else if (!execution.result.fromCache) {
-              cachedInvalidated = true;
-            }
+        (err) => {
+          if (isRunCommandErroredEvent(err)) {
+            obs.next(err);
           }
-          // In topological mode, if an error happened during the step
-          // or a cache has been invalidated invalidate all ancestors cache.
-          if (mode === 'topological' && (hasAtLeastOneError || cachedInvalidated) && current) {
-            invalidations$.push(Runner._invalidateSubsequentWorkspaceCache(targets, current, cmd));
-          }
-          from(invalidations$).pipe(concatAll()).subscribe(
+          resolveInvalidations$().subscribe(
             (next) => obs.next(next),
-            (error) => obs.error(error),
+            (error) => {
+              if (isRunCommandErroredEvent(error)) {
+                obs.next(error);
+              }
+              obs.error(error);
+            },
+            () => obs.error(err),
+          );
+        },
+        () => {
+          resolveInvalidations$().subscribe(
+            (next) => obs.next(next),
+            (error) => {
+              if (isRunCommandErroredEvent(error)) {
+                obs.next(error);
+              }
+              obs.error(error);
+            },
             () => obs.complete(),
           );
         }
@@ -148,7 +175,6 @@ export class Runner {
 
   private static _runForWorkspace(
     executions: Set<CaughtProcessExecution>,
-    targets: OrderedTargets,
     target: IResolvedTarget,
     cmd: string,
     force: boolean,
@@ -159,7 +185,7 @@ export class Runner {
     if (target.affected && target.hasCommand) {
       const started$: Observable<RunCommandEvent>  = of({ type: RunCommandEventEnum.NODE_STARTED, workspace: target.workspace });
       const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio).pipe(
-        concatMap((result) => Runner._mapToEventsAndInvalidateCacheIfNecessary(executions, result, targets, target, cmd, mode)),
+        concatMap((result) => Runner._mapToEventsAndInvalidateCacheIfNecessary(executions, result, target, mode)),
       );
       return concat(
         started$,
@@ -176,9 +202,7 @@ export class Runner {
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
   ) : Observable<CaughtProcessExecution>{
-    console.log({ cmd, force, args, stdio })
     const command$ = target.workspace.runObs(cmd, force, args, stdio);
-    console.log(command$);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),
       catchError((error) => of({ status: 'ko' as const, error, target })),
@@ -188,17 +212,12 @@ export class Runner {
   private static _mapToEventsAndInvalidateCacheIfNecessary(
     executions: Set<CaughtProcessExecution>,
     execution: CaughtProcessExecution,
-    targets: OrderedTargets,
     target: IResolvedTarget,
-    cmd: string,
     mode: 'topological' | 'parallel',
   ): Observable<RunCommandEvent> {
     return new Observable<RunCommandEvent>((obs) => {
       executions.add(execution);
       const workspace = target.workspace;
-      console.debug({
-        execution, targets, target, cmd, mode,
-      })
       if (execution.status === 'ok') {
         const result = execution.result;
         obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace: workspace });

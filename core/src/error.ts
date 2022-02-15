@@ -30,7 +30,7 @@ export class CentipodError extends Error {
 }
 
 export const isProcessError = (error: unknown): error is ICommandResult => {
-  return (error as ICommandResult)?.stderr != null;
+  return (error as ICommandResult)?.all != null;
 };
 
 export const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
