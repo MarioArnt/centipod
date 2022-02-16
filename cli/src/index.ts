@@ -69,6 +69,7 @@ program
   .action(
     async (cmd, options) =>
       await commandWrapper(async () => {
+        console.debug('run');
         run(cmd, options);
       }, true),
   );

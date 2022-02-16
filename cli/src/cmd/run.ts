@@ -28,7 +28,7 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
       logger.lf();
       logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(error.workspace.name)}`, logger.failed);
       printError(error.error);
-    } else if (isProcessError(error)) {
+    } else if (isProcessError(error) && !!error.all) {
       logger.lf();
       logger.info(chalk.cyan('>'), error.command);
       logger.lf();
