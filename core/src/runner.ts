@@ -78,12 +78,18 @@ export class Runner {
     });
   }*/
 
-  private _scheduleTasks(cmd: string, targets: OrderedTargets, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
-    const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio));
+  private _scheduleTasks(
+    cmd: string,
+    targets: OrderedTargets,
+    options: RunOptions,
+    args: string[] | string = [],
+    env: {[key: string]: string} = {}
+  ): Observable<RunCommandEvent> {
+    const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env));
     return from(steps$).pipe(concatAll());
   }
 
-  runCommand(cmd: string, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
+  runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       const targets = new TargetsResolver(this._project);
       targets.resolve(cmd, options).then((targets) => {
@@ -92,7 +98,7 @@ export class Runner {
         if (!targets.length) {
           return obs.complete();
         }
-        const tasks$ = this._scheduleTasks(cmd, targets, options, args);
+        const tasks$ = this._scheduleTasks(cmd, targets, options, args, env);
         tasks$.subscribe(
           (evt) => obs.next(evt),
           (err) => obs.error(err),
@@ -109,10 +115,11 @@ export class Runner {
     force: boolean,
     mode: 'topological' | 'parallel',
     args: string[] | string = [],
-    stdio: 'pipe' | 'inherit' = 'pipe'
+    stdio: 'pipe' | 'inherit' = 'pipe',
+    env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent> {
     const executions = new Set<CaughtProcessExecution>();
-    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio));
+    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),
     );
@@ -180,11 +187,12 @@ export class Runner {
     force: boolean,
     mode: 'topological' | 'parallel',
     args: string[] | string = [],
-    stdio: 'pipe' | 'inherit' = 'pipe'
+    stdio: 'pipe' | 'inherit' = 'pipe',
+    env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent> {
     if (target.affected && target.hasCommand) {
       const started$: Observable<RunCommandEvent>  = of({ type: RunCommandEventEnum.NODE_STARTED, workspace: target.workspace });
-      const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio).pipe(
+      const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio, env).pipe(
         concatMap((result) => Runner._mapToEventsAndInvalidateCacheIfNecessary(executions, result, target, mode)),
       );
       return concat(
@@ -201,8 +209,9 @@ export class Runner {
     force: boolean,
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
+    env: {[key: string]: string} = {}
   ) : Observable<CaughtProcessExecution>{
-    const command$ = target.workspace.runObs(cmd, force, args, stdio);
+    const command$ = target.workspace.runObs(cmd, force, args, stdio, env);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),
       catchError((error) => of({ status: 'ko' as const, error, target })),

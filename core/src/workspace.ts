@@ -161,7 +161,13 @@ export class Workspace {
     return !!this.config[cmd];
   }
 
-  runObs(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Observable<IProcessResult> {
+  runObs(
+    cmd: string,
+    force = false,
+    args: string[] | string = [],
+    stdio: 'pipe' | 'inherit' = 'pipe',
+    env: {[key: string]: string} = {},
+  ): Observable<IProcessResult> {
     return new Observable<IProcessResult>((obs) => {
       let now = Date.now();
       const cache = new Cache(this, cmd);
@@ -174,10 +180,11 @@ export class Workspace {
           now = Date.now();
           const _currentArgs = _args[idx] || '';
           const _fullCmd = [_cmd, _currentArgs].join(' ');
+          console.debug('full env', { ...process.env, FORCE_COLOR: '2', ...env });
           const result = await command(_fullCmd, {
             cwd: this.root,
             all: true,
-            env: { ...process.env, FORCE_COLOR: '2' },
+            env: { ...process.env, FORCE_COLOR: '2', ...env },
             shell: process.platform === 'win32',
             stdio,
           });
@@ -214,6 +221,11 @@ export class Workspace {
           })
       });
     });
+  }
+
+  async getResult(cmd: string): Promise<Array<ICommandResult> | null> {
+    const cache = new Cache(this, cmd);
+    return cache.read();
   }
 
   async run(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
