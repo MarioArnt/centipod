@@ -11,6 +11,7 @@ import {
 import { Project } from './project';
 import { Workspace } from './workspace';
 import { OrderedTargets, TargetsResolver } from './targets';
+import { ICacheOptions } from "./cache";
 
 export interface ICommonRunOptions{
   mode: 'parallel' | 'topological';
@@ -48,6 +49,7 @@ export class Runner {
   constructor(
     private readonly _project: Project,
     private readonly _concurrency: number = 4,
+    private readonly _cacheOptions: ICacheOptions = {},
   ) {}
 
   /*watch(cmd: string, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
@@ -119,7 +121,7 @@ export class Runner {
     env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent> {
     const executions = new Set<CaughtProcessExecution>();
-    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env));
+    const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),
     );
@@ -188,11 +190,12 @@ export class Runner {
     mode: 'topological' | 'parallel',
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
-    env: {[key: string]: string} = {}
+    env: {[key: string]: string} = {},
+    cacheOptions: ICacheOptions = {},
   ): Observable<RunCommandEvent> {
     if (target.affected && target.hasCommand) {
       const started$: Observable<RunCommandEvent>  = of({ type: RunCommandEventEnum.NODE_STARTED, workspace: target.workspace });
-      const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio, env).pipe(
+      const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio, env, cacheOptions).pipe(
         concatMap((result) => Runner._mapToEventsAndInvalidateCacheIfNecessary(executions, result, target, mode)),
       );
       return concat(
@@ -209,9 +212,10 @@ export class Runner {
     force: boolean,
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
-    env: {[key: string]: string} = {}
+    env: {[key: string]: string} = {},
+    cacheOptions: ICacheOptions = {},
   ) : Observable<CaughtProcessExecution>{
-    const command$ = target.workspace.runObs(cmd, force, args, stdio, env);
+    const command$ = target.workspace.runObs(cmd, force, args, stdio, env, cacheOptions);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),
       catchError((error) => of({ status: 'ko' as const, error, target })),

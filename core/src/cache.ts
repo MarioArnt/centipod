@@ -10,14 +10,29 @@ import { CentipodError, CentipodErrorCode } from './error';
 import { IConfigEntry } from './config';
 import {logger} from "./logger";
 
+export interface ICacheOptions {
+  dir?: string;
+}
+
 export class Cache {
+
+  private readonly _cacheFolder: string;
+
   constructor (
     private readonly _workspace: Workspace,
     private readonly _cmd: string,
-  ) {}
+    private readonly _args: string[] | string = [],
+    private readonly _env: {[key: string]: string} = {},
+    private readonly _options: ICacheOptions = {},
+  ) {
+    this._cacheFolder = join(this._workspace.root, '.caches', this._options.dir || this._cmd);
+  }
+
+  get args() { return this._args };
+  get env() { return this._env };
 
   get cacheFolder(): string {
-    return join(this._workspace.root, '.caches', this._cmd);
+    return this._cacheFolder;
   }
 
   get outputPath(): string {

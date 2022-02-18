@@ -8,7 +8,7 @@ import {sync as glob} from 'fast-glob';
 import {command} from 'execa';
 import { IConfig, loadConfig} from './config';
 import {ICommandResult, IProcessResult} from './process';
-import {Cache} from './cache';
+import { Cache, ICacheOptions } from "./cache";
 import {Publish, PublishActions, PublishEvent} from './publish';
 import {Observable} from 'rxjs';
 import {CentipodError, CentipodErrorCode} from './error';
@@ -167,10 +167,11 @@ export class Workspace {
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
     env: {[key: string]: string} = {},
+    options: ICacheOptions = {},
   ): Observable<IProcessResult> {
     return new Observable<IProcessResult>((obs) => {
       let now = Date.now();
-      const cache = new Cache(this, cmd);
+      const cache = new Cache(this, cmd, args, env, options);
       const runCommands = async () => {
         const results: ICommandResult[] = [];
         const cmds = this.config[cmd].cmd;
@@ -180,7 +181,6 @@ export class Workspace {
           now = Date.now();
           const _currentArgs = _args[idx] || '';
           const _fullCmd = [_cmd, _currentArgs].join(' ');
-          console.debug('full env', { ...process.env, FORCE_COLOR: '2', ...env });
           const result = await command(_fullCmd, {
             cwd: this.root,
             all: true,
@@ -228,7 +228,7 @@ export class Workspace {
     return cache.read();
   }
 
-  async run(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
+  async deprecatedRun(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
     console.debug('NOT STUBBED');
     let now = Date.now();
     const cache = new Cache(this, cmd);

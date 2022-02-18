@@ -32,6 +32,8 @@ export class Checksum {
     const checksums: Record<string, string> = {
       cmd: Array.isArray(config.cmd) ? config.cmd.join(',') : config.cmd,
       globs: config.src.join(','),
+      args: JSON.stringify(this._cache.args),
+      env: JSON.stringify(this._cache.env),
     };
     await Promise.all(src.map(async (path) => {
       // TODO: Batch to avoid EMFILE
