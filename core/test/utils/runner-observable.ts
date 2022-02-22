@@ -11,7 +11,7 @@ const expectTimeframe = (
   expectedTimeframe: string,
   reject: (err: unknown) => void,
 ) => {
-  console.debug(receivedEvents);
+  // console.debug(receivedEvents);
   const expectedFrames = expectedTimeframe.split('-');
   const expectedEventCount = expectedFrames.map((frame) => [...frame]).reduce((acc, val) => acc += val.length, 0);
   if (expectedEventCount !== receivedEvents.length) {
@@ -23,15 +23,15 @@ const expectTimeframe = (
   let timeframeError = false;
   let receivedFrame = '';
   for (const expectedFrame of expectedFrames) {
-    console.debug({ offset });
+    // console.debug({ offset });
     const expectedEventTypes: (number | 'X')[] = [...expectedFrame].map((t) => t === 'X' ? 'X' : Number(t));
     const receivedEventTypes = receivedEvents.slice(offset, offset + expectedEventTypes.length).map((e) => e.type);
-    console.debug({ expectedEventTypes, receivedEventTypes });
+    // console.debug({ expectedEventTypes, receivedEventTypes });
     const isComparable = areEquivalent(receivedEventTypes, expectedEventTypes);
     if (!isComparable) {
       timeframeError = true;
     }
-    console.log(receivedEventTypes.join(''));
+    // console.log(receivedEventTypes.join(''));
     receivedFrame += (offset ? '-' : '') + receivedEventTypes.join('')
     offset += expectedEventTypes.length;
   }
@@ -86,7 +86,7 @@ export const expectObservable = async (
   return new Promise<void>((resolve, reject) => {
     const receivedEvents: ReceivedEvent[] = [];
     runCommand$.subscribe((evt) => {
-      console.debug(evt);
+      // console.debug(evt);
       switch (evt.type) {
         case RunCommandEventEnum.TARGETS_RESOLVED:
           receivedEvents.push({ type: evt.type });
@@ -97,22 +97,22 @@ export const expectObservable = async (
         case RunCommandEventEnum.NODE_SKIPPED:
         case RunCommandEventEnum.ERROR_INVALIDATING_CACHE:
         case RunCommandEventEnum.CACHE_INVALIDATED:
-          console.log({ type: evt.type, workspace: evt.workspace?.name });
+          // console.log({ type: evt.type, workspace: evt.workspace?.name });
           receivedEvents.push({ type: evt.type, workspace: evt.workspace?.name });
           break;
         default:
-          console.error('Unexpected event type', evt);
+          // console.error('Unexpected event type', evt);
           reject();
           break;
       }
     }, (err) => {
-      console.debug('ERRORED', err);
+      // console.debug('ERRORED', err);
       receivedEvents.push({
         type: 'X' as const,
       })
       verifyAssertions(receivedEvents, expectedTimeframe, expectedWorkspaces, resolve, reject, predicate);
     }, () => {
-      console.debug('COMPLETED');
+      // console.debug('COMPLETED');
       verifyAssertions(receivedEvents, expectedTimeframe, expectedWorkspaces, resolve, reject, predicate);
     });
   });

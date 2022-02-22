@@ -5,14 +5,25 @@ import {join, relative} from 'path';
 import {INpmInfos, Package} from './package';
 import {git} from './git';
 import {sync as glob} from 'fast-glob';
-import {command} from 'execa';
-import { IConfig, loadConfig} from './config';
-import {ICommandResult, IProcessResult} from './process';
+import { command, ExecaChildProcess } from "execa";
+import { ICommandConfig, IConfig, ILogsCondition, loadConfig } from "./config";
+import {
+  CommandResult,
+  ICommandResult,
+  IDaemonCommandResult,
+  IProcessResult,
+  isDaemon,
+} from "./process";
 import { Cache, ICacheOptions } from "./cache";
 import {Publish, PublishActions, PublishEvent} from './publish';
 import {Observable} from 'rxjs';
 import {CentipodError, CentipodErrorCode} from './error';
 import semver from 'semver';
+import { Readable } from "stream";
+import { ServiceStatus, TranspilingStatus } from "../../../types";
+
+const TWO_MINUTES = 2 * 60 * 1000;
+const DEFAULT_DAEMON_TIMEOUT = TWO_MINUTES;
 
 export class Workspace {
   // Constructor
@@ -161,7 +172,163 @@ export class Workspace {
     return !!this.config[cmd];
   }
 
-  runObs(
+  private async _handleDaemon<T = string>(
+    daemonConfig: ILogsCondition | ILogsCondition[],
+    cmdProcess: ExecaChildProcess<string>,
+    startedAt: number,
+  ): Promise<IDaemonCommandResult> {
+    const logsConditions = Array.isArray(daemonConfig) ? daemonConfig : [daemonConfig];
+    let killed = false;
+    cmdProcess.catch((crashed) => {
+      if (!killed) {
+        console.debug('Daemon crashed');
+        throw crashed;
+      }
+    });
+    console.debug('Verifying logs conditions');
+    const logsConditionsMet$ = logsConditions.map((condition) => new Promise<IDaemonCommandResult>((resolve, reject) => {
+      const logStream = cmdProcess[condition.stdio];
+      if (!logStream) {
+        return reject('Log stream not readable, did you try to run a daemon cmd using stdio inherit ?')
+      }
+      const timeout = condition.timeout || DEFAULT_DAEMON_TIMEOUT;
+      const timer = setTimeout(() => reject(`Timeout (${timeout}ms) for log condition exceeded`), timeout);
+      const abort = setInterval(() => {
+        if (killed) {
+          console.debug('Killed by someone else');
+          clearInterval(abort);
+          return reject("Process killed");
+        };
+      }, 200);
+      logStream.on('data', (chunk: string | Buffer) => {
+        console.log('[child process]', chunk.toString());
+        if (condition.matcher === 'contains' && chunk.toString().includes(condition.value)) {
+          console.debug('Condition resolved for', condition);
+          clearTimeout(timer);
+          return condition.type === 'success' ? resolve({daemon: true, process: cmdProcess, took: Date.now() - startedAt}) : reject(`Log condition explicitly failed : ${JSON.stringify(condition)}`);
+        }
+      });
+    }));
+    return Promise.race(logsConditionsMet$).catch((e) => {
+      console.error('Error happened, killing process');
+      killed = true;
+      cmdProcess.kill();
+      console.debug('Rethrow', e);
+      throw e;
+    });
+  }
+
+  private async _runCommand(
+    cmd: string | ICommandConfig,
+    args?: string,
+    env: {[key: string]: string} = {},
+    stdio: 'pipe' | 'inherit' = 'pipe',
+  ): Promise<CommandResult> {
+    const startedAt = Date.now();
+    const _cmd = typeof cmd === 'string' ? cmd : cmd.run;
+    const _fullCmd = args ? [_cmd, args].join(' ') : _cmd;
+    console.debug('Launching process');
+    const _process = command(_fullCmd, {
+      cwd: this.root,
+      all: true,
+      env: { ...process.env, FORCE_COLOR: '2', ...env },
+      shell: process.platform === 'win32',
+      stdio,
+    });
+    console.debug('Process laucnhed');
+    if (typeof cmd !== 'string' && cmd.daemon) {
+      console.debug('Command flagged as daemon');
+      return this._handleDaemon(cmd.daemon, _process, startedAt);
+    } else {
+      console.debug('Command not flagged as daemon');
+      const result = await _process;
+      console.debug('Command terminated', result);
+      return {...result, took: Date.now() - startedAt, daemon: false };
+    }
+  }
+
+  private async _runCommands(
+    cmd: string,
+    args: string[] | string = [],
+    env: {[key: string]: string} = {},
+    stdio: 'pipe' | 'inherit' = 'pipe',
+  ): Promise<Array<CommandResult>> {
+    const results: Array<CommandResult> = [];
+    const config = this.config[cmd];
+    const cmds = config.cmd;
+    const _args = Array.isArray(args) ? args : [args];
+    let idx = 0;
+    for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
+      console.debug('Do run command', { cmd: _cmd, args: _args[idx], env, stdio});
+      results.push(await this._runCommand(_cmd, _args[idx], env, stdio));
+      idx++;
+    }
+    console.debug('All commands run', results);
+    return results;
+  }
+
+  private async _runCommandsAndCache(
+    cache: Cache,
+    cmd: string,
+    args: string[] | string = [],
+    env: {[key: string]: string} = {},
+    stdio: 'pipe' | 'inherit' = 'pipe',
+  ): Promise<IProcessResult> {
+    try {
+      console.debug('Do run commands');
+      const results = await this._runCommands(cmd, args, env, stdio);
+      try {
+        console.debug('All success, caching result');
+        const toCache: Array<ICommandResult> = results.filter((r) => !isDaemon(r)) as Array<ICommandResult>;
+        await cache.write(toCache);
+        console.debug('Successfully cached');
+        console.debug('Emitting');
+        return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
+      } catch (e) {
+        console.error('Error writing cache');
+        console.debug('Emitting');
+        return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
+      }
+    } catch (e) {
+      console.debug('Command failed, invalidating cache');
+      try {
+        await cache.invalidate();
+      } catch (err) {
+        console.error('Error invalidating cache', err);
+      }
+      console.debug('Rethrowing');
+      throw e;
+    }
+  }
+
+  private async _run(
+    cmd: string,
+    force = false,
+    args: string[] | string = [],
+    env: {[key: string]: string} = {},
+    options: ICacheOptions = {},
+    stdio: 'pipe' | 'inherit' = 'pipe',
+  ): Promise<IProcessResult> {
+    let now = Date.now();
+    console.debug('Running command', { cmd, args, env });
+    const cache = new Cache(this, cmd, args, env, options);
+    try {
+      const cachedOutputs = await cache.read();
+      console.debug('Cache read', cachedOutputs);
+      if (!force && cachedOutputs) {
+        console.debug('From cache');
+        return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true };
+      }
+      console.debug('Cache outdated');
+      return this._runCommandsAndCache(cache, cmd, args, env, stdio);
+    } catch (e) {
+      console.debug('Error reading cache');
+      // Error reading from cache
+      return this._runCommandsAndCache(cache, cmd, args, env, stdio);
+    }
+  }
+
+  run(
     cmd: string,
     force = false,
     args: string[] | string = [],
@@ -170,55 +337,20 @@ export class Workspace {
     options: ICacheOptions = {},
   ): Observable<IProcessResult> {
     return new Observable<IProcessResult>((obs) => {
-      let now = Date.now();
+      console.debug('Create cache');
       const cache = new Cache(this, cmd, args, env, options);
-      const runCommands = async () => {
-        const results: ICommandResult[] = [];
-        const cmds = this.config[cmd].cmd;
-        const _args = Array.isArray(args) ? args : [args];
-        let idx = 0;
-        for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
-          now = Date.now();
-          const _currentArgs = _args[idx] || '';
-          const _fullCmd = [_cmd, _currentArgs].join(' ');
-          const result = await command(_fullCmd, {
-            cwd: this.root,
-            all: true,
-            env: { ...process.env, FORCE_COLOR: '2', ...env },
-            shell: process.platform === 'win32',
-            stdio,
-          });
-          results.push({...result, took: Date.now() - now });
-          idx++;
-        }
-        return results;
-      }
-      cache.read().then((cachedOutputs) => {
-        if (!force && cachedOutputs) {
-          obs.next({ commands: cachedOutputs, overall: Date.now() - now, fromCache: true });
+      console.debug('Running cmd');
+      this._run(cmd, force, args, env, options, stdio)
+        .then((result) => {
+          console.debug('Success', result);
+          obs.next(result)
+        })
+        .catch((error) => {
+          console.debug('Errored', error);
+          obs.error(error);
+        }).finally(() => {
+          console.debug('Completed');
           obs.complete();
-        } else {
-          runCommands()
-            .then((results) => {
-              obs.next({ commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) });
-              cache.write(results).finally(() => obs.complete())
-            })
-            .catch((err) => {
-              obs.error(err);
-              cache.invalidate().finally(() => obs.complete())
-          })
-        }
-      }).catch((err) => {
-        // Cannot read cache
-        runCommands()
-          .then((results) => {
-            obs.next({ commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) });
-            cache.write(results).finally(() => obs.complete())
-          })
-          .catch((err) => {
-            obs.error(err);
-            cache.invalidate().finally(() => obs.complete())
-          })
       });
     });
   }
@@ -226,41 +358,6 @@ export class Workspace {
   async getResult(cmd: string): Promise<Array<ICommandResult> | null> {
     const cache = new Cache(this, cmd);
     return cache.read();
-  }
-
-  async deprecatedRun(cmd: string, force = false, args: string[] | string = [], stdio: 'pipe' | 'inherit' = 'pipe'): Promise<IProcessResult> {
-    console.debug('NOT STUBBED');
-    let now = Date.now();
-    const cache = new Cache(this, cmd);
-    const cachedOutputs = await cache.read();
-    if (!force && cachedOutputs) {
-      return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true }
-    }
-    try {
-      const results: ICommandResult[] = [];
-      const cmds = this.config[cmd].cmd;
-      const _args = Array.isArray(args) ? args : [args];
-      let idx = 0;
-      for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
-        now = Date.now();
-        const _currentArgs = _args[idx] || '';
-        const _fullCmd = [_cmd, _currentArgs].join(' ');
-        const result = await command(_fullCmd, {
-          cwd: this.root,
-          all: true,
-          env: { ...process.env, FORCE_COLOR: '2' },
-          shell: process.platform === 'win32',
-          stdio,
-        });
-        results.push({...result, took: Date.now() - now });
-        idx++;
-      }
-      await cache.write(results);
-      return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
-    } catch (e) {
-      await cache.invalidate();
-      throw e;
-    }
   }
 
   async invalidate(cmd: string): Promise<void> {

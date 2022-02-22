@@ -25,12 +25,16 @@ export class Checksum {
 
   async calculate(): Promise<Record<string, string>> {
     const config = this._cache.config;
+    if (!config.src) {
+      throw new CentipodError(CentipodErrorCode.CACHE_DISABLED, 'Asked to compute checksums whereas cache is disabled by config');
+    }
     const src = config.src.map((s) => glob(join(this._cache.workspace.root, s))).reduce((acc, val) => acc = acc.concat(val), []);
     if (!src.length) {
       throw new CentipodError(CentipodErrorCode.NO_FILES_TO_CACHE, 'No path to cache');
     }
+    const _cmd = (Array.isArray(config.cmd) ? config.cmd : [config.cmd]).map((c) => typeof c === 'string' ? c : c.run);
     const checksums: Record<string, string> = {
-      cmd: Array.isArray(config.cmd) ? config.cmd.join(',') : config.cmd,
+      cmd: _cmd.join(','),
       globs: config.src.join(','),
       args: JSON.stringify(this._cache.args),
       env: JSON.stringify(this._cache.env),

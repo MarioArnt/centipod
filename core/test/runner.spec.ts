@@ -22,7 +22,7 @@ interface IRunStub {
 
 const stubRun = (stub: SinonStub, calls: IRunStub[]) => {
   calls.forEach((call, idx) => {
-    console.log('stubbing', { stub, call, idx });
+    // console.log('stubbing', { stub, call, idx });
     if (call.resolve) {
       stub.withArgs(...call.args).onCall(idx).returns(new Observable((obs) => {
         setTimeout(() => {
@@ -57,7 +57,7 @@ describe('[class] Runner', () => {
       project = await getProject();
       stubs.invalidate = stub(Workspace.prototype, 'invalidate');
       stubs.invalidate.resolves();
-      stubs.run = stub(Workspace.prototype, 'runObs');
+      stubs.run = stub(Workspace.prototype, 'run');
       stubs.targets = stub(TargetsResolver.prototype, 'resolve');
     })
     afterEach(() => {

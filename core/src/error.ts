@@ -1,5 +1,6 @@
 import {ICommandResult, IRunCommandErrorEvent} from "./process";
 
+
 export enum CentipodErrorCode {
   NOT_IN_VALID_YARN_PROJECT,
   INVALIDATING_CACHE_FAILED,
@@ -19,6 +20,7 @@ export enum CentipodErrorCode {
   CANNOT_DETERMINE_BUMP,
   NOTHING_TO_DO,
   BAD_REVISION,
+  CACHE_DISABLED
 }
 
 export class CentipodError extends Error {

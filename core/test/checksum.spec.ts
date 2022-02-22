@@ -89,7 +89,9 @@ describe('[class] Checksum manager', () => {
       glob.restore();
       fromFile.restore();
       expect(calculated).toEqual({
+        "args": "[]",
         "cmd": "npm run foo",
+        "env": "{}",
         "globs": "src/**/*.ts,test/**/*.ts",
         '/tmp/fake/location/src/index.ts': Buffer.from('1234'),
         '/tmp/fake/location/src/bar.ts': Buffer.from('5678'),
@@ -123,6 +125,8 @@ describe('[class] Checksum manager', () => {
       glob.restore();
       fromFile.restore();
       expect(calculated).toEqual({
+        "args": "[]",
+        "env": "{}",
         "cmd": "npm run pre:test,npm run test",
         "globs": "src/**/*.ts",
         '/tmp/fake/location/src/index.ts': Buffer.from('1234'),

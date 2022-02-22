@@ -22,10 +22,12 @@ export interface ICommonRunOptions{
 }
 
 export interface ITopologicalRunOptions extends ICommonRunOptions {
+  mode: 'topological';
   to?: Workspace;
 }
 
 export interface IParallelRunOptions extends ICommonRunOptions {
+  mode: 'parallel';
   workspaces?: Workspace[];
 }
 
@@ -215,7 +217,7 @@ export class Runner {
     env: {[key: string]: string} = {},
     cacheOptions: ICacheOptions = {},
   ) : Observable<CaughtProcessExecution>{
-    const command$ = target.workspace.runObs(cmd, force, args, stdio, env, cacheOptions);
+    const command$ = target.workspace.run(cmd, force, args, stdio, env, cacheOptions);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),
       catchError((error) => of({ status: 'ko' as const, error, target })),

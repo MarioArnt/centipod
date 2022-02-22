@@ -1,13 +1,32 @@
-import { ExecaReturnValue } from "execa";
+import { ExecaChildProcess, ExecaReturnValue } from "execa";
 import { Workspace } from "./workspace";
 
-export interface IProcessResult<T= string> {
-  commands: Array<ICommandResult<T>>;
+
+export interface IProcessResult {
+  commands: Array<CommandResult>;
   overall: number;
   fromCache: boolean;
 }
 
-export interface ICommandResult<T = string> extends ExecaReturnValue<T> {
+export const isDaemon = (processResult: CommandResult): processResult is IDaemonCommandResult => {
+  return processResult.daemon;
+}
+
+export const isNotDaemon = (processResult: CommandResult): processResult is ICommandResult => {
+  return !processResult.daemon;
+}
+
+export type CommandResult = IDaemonCommandResult | ICommandResult;
+
+
+export interface IDaemonCommandResult {
+  daemon: true;
+  process: ExecaChildProcess<string>;
+  took: number;
+}
+
+export interface ICommandResult extends ExecaReturnValue<string> {
+  daemon: false;
   took: number;
 }
 

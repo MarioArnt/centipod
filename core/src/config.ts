@@ -1,9 +1,24 @@
 import path_1, {dirname, join} from "path";
 import {promises as fs} from "fs";
 
+export interface ILogsCondition {
+  type: 'success' | 'failure';
+  stdio: 'stdout' | 'stderr' | 'all';
+  matcher: 'contains' | 'regex';
+  value: string;
+  timeout?: number
+}
+
+export interface ICommandConfig {
+  run: string;
+  env?: {[key: string]: string};
+  daemon?: false | Array<ILogsCondition> | ILogsCondition;
+}
+
 export interface IConfigEntry {
-  cmd: string | string[];
-  src: string[];
+  cmd: string | string[] | ICommandConfig | Array<ICommandConfig>;
+  src?: string[];
+  artifacts?: string[];
 }
 
 export interface IConfig {

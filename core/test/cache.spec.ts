@@ -13,20 +13,30 @@ describe('[class] Cache manager', () => {
     it('should return cached command result if the stored checksum and the current checksum are the same', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
       };
       const fs = stub(nodeFs, 'readFile');
       checksums.calculate.resolves({
+        args: '[]',
         cmd: 'foo',
+        env: '{}',
         globs: 'foo/**/*.ts,bar/**/*;ts',
         'foo/bar.ts:': 'b6a73d8bc3edf20e',
         'foo/baz.ts:': '022cf092d78977',
       });
       checksums.read.resolves({
+        args: '[]',
+        env: '{}',
         cmd: 'foo',
         globs: 'foo/**/*.ts,bar/**/*;ts',
         'foo/bar.ts:': 'b6a73d8bc3edf20e',
@@ -43,8 +53,14 @@ describe('[class] Cache manager', () => {
     it('should return null if the stored checksum and the current checksum are different', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
@@ -73,8 +89,14 @@ describe('[class] Cache manager', () => {
     it('should return null if something wrong happen reading checksum', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
@@ -94,8 +116,14 @@ describe('[class] Cache manager', () => {
     it('should return null if something wrong happen calculating current checksum', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
@@ -115,8 +143,14 @@ describe('[class] Cache manager', () => {
     it('should return null if something wrong happen reading cached command output', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
@@ -144,8 +178,14 @@ describe('[class] Cache manager', () => {
     it('should return null if cached output is not parseable', async () => {
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
         calculate: stub(Checksum.prototype, 'calculate'),
         read: stub(Checksum.prototype, 'read'),
@@ -174,7 +214,12 @@ describe('[class] Cache manager', () => {
     it('should return null and warn user if config patterns match no files', async () => {
       const workspace = {
         root: '/tmp/fake/location',
-        config: { foo: {src: ['foo/**/*.ts', 'bar/**/*.ts']} },
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
       const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const checksums = {
@@ -209,8 +254,14 @@ describe('[class] Cache manager', () => {
       mkdir.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       await cache.write([]);
       access.restore();
       writeFile.restore();
@@ -231,8 +282,14 @@ describe('[class] Cache manager', () => {
       mkdir.rejects();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       await cache.write([]);
       access.restore();
       writeFile.restore();
@@ -249,8 +306,14 @@ describe('[class] Cache manager', () => {
       writeFile.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       cache._checksums = { foo: 'bar '};
@@ -269,8 +332,14 @@ describe('[class] Cache manager', () => {
       writeFile.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       await cache.write([]);
       access.restore();
       writeFile.restore();
@@ -286,8 +355,14 @@ describe('[class] Cache manager', () => {
       const log = stub(logger, 'warn');
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       const restore = (): void => {
         access.restore();
         writeFile.restore();
@@ -346,8 +421,14 @@ describe('[class] Cache manager', () => {
       unlink.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       await cache.invalidate();
       access.restore();
       unlink.restore();
@@ -367,8 +448,14 @@ describe('[class] Cache manager', () => {
       unlink.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       await cache.invalidate();
       access.restore();
       unlink.restore();
@@ -383,8 +470,14 @@ describe('[class] Cache manager', () => {
       unlink.resolves();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       try {
         await cache.invalidate();
         access.restore();
@@ -405,8 +498,14 @@ describe('[class] Cache manager', () => {
       unlink.withArgs('/tmp/fake/location/.caches/foo/output.json').rejects();
       const workspace = {
         root: '/tmp/fake/location',
+        config: {
+          foo: {
+            src: ['**'],
+            cmd: 'npm run foo',
+          }
+        }
       }
-      const cache = new Cache(workspace as Workspace, 'foo');
+      const cache = new Cache(workspace as unknown as Workspace, 'foo');
       try {
         await cache.invalidate();
         access.restore();

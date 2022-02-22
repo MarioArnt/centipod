@@ -49,7 +49,10 @@ export class Cache {
 
   private _checksums: Record<string, string> | undefined;
 
-  async read(): Promise<Array<ICommandResult<string>> | null> {
+  async read(): Promise<Array<ICommandResult> | null> {
+    if (!this.config.src) {
+      return null;
+    }
     try {
       const checksums = new Checksum(this);
       const [currentChecksums, storedChecksum] = await Promise.all([
@@ -73,6 +76,9 @@ export class Cache {
   }
 
   async write(output: Array<ICommandResult>): Promise<void> {
+    if (!this.config.src) {
+      return;
+    }
     try {
       const checksums = new Checksum(this)
       const toWrite = this._checksums ?? await checksums.calculate();
@@ -88,6 +94,9 @@ export class Cache {
   }
 
   async invalidate(): Promise<void> {
+    if (!this.config.src) {
+      return;
+    }
     try {
       const checksums = new Checksum(this);
       const exists = async (path: string): Promise<boolean> => {
