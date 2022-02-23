@@ -13,6 +13,7 @@
   "dependencies": {
     "chokidar": "^3.5.3",
     "conventional-commits-parser": "^3.2.1",
+    "debug": "^4.3.3",
     "execa": "^5.0.0",
     "fast-glob": "^3.2.5",
     "hasha": "5.2.2",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/conventional-commits-parser": "^3.0.1",
+    "@types/debug": "^4.1.7",
     "@types/lodash": "4.14.168",
     "@types/semver": "^7.3.5",
     "typescript": "^4.2.4"

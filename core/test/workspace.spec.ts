@@ -157,7 +157,7 @@ describe('[class] workspace', () => {
         done();
       }, () => done());
     });
-    it.only('should run a given daemon and report error - logs condition', (done) => {
+    it('should run a given daemon and report error - logs condition', (done) => {
       const workspace = new Workspace({} as any, '', {
         foo: {
           cmd: {
@@ -182,9 +182,7 @@ describe('[class] workspace', () => {
       workspace.run('foo').subscribe((result) => {
         expect(result).toBeFalsy();
       }, (e) => {
-        console.debug(e);
-        expect(e).toBeTruthy();
-        expect(e.message).toBe('Not the right one');
+        expect(e).toBe("Log condition explicitly failed : {\"type\":\"failure\",\"stdio\":\"stderr\",\"matcher\":\"contains\",\"value\":\"wrong happened\",\"timeout\":1000}");
         done();
       });
     });
@@ -204,7 +202,7 @@ describe('[class] workspace', () => {
               stdio: 'stderr',
               matcher: 'contains',
               value: 'wrong happened',
-              timeout: 10,
+              timeout: 1000,
             }]
           },
         },
@@ -214,8 +212,7 @@ describe('[class] workspace', () => {
       workspace.run('foo').subscribe((result) => {
         expect(result).toBeFalsy();
       }, (e) => {
-        expect(e).toBeTruthy();
-        expect(e.message.includes()).toBeTruthy();
+        expect(e).toBe('Timeout (10ms) for log condition exceeded');
         done();
       });
     });
@@ -237,12 +234,11 @@ describe('[class] workspace', () => {
       stubs.cacheRead.resolves(null);
       stubs.cacheWrite.resolves();
       workspace.run('foo').subscribe((result) => {
-        expect((result.commands[0] as IDaemonCommandResult).process).toBeTruthy();
-        (result.commands[0] as IDaemonCommandResult).process.kill();
+        expect(result).toBeFalsy();
       }, (e) => {
-        expect(e).toBeFalsy();
+        expect(e.exitCode).toBe(1);
         done();
-      }, () => done());
+      });
     });
   });
   describe('[method] invalidate', () => {

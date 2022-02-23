@@ -5,7 +5,7 @@ import {join, relative} from 'path';
 import {INpmInfos, Package} from './package';
 import {git} from './git';
 import {sync as glob} from 'fast-glob';
-import { command, ExecaChildProcess } from "execa";
+import { command, ExecaChildProcess, ExecaError } from "execa";
 import { ICommandConfig, IConfig, ILogsCondition, loadConfig } from "./config";
 import {
   CommandResult,
@@ -16,11 +16,14 @@ import {
 } from "./process";
 import { Cache, ICacheOptions } from "./cache";
 import {Publish, PublishActions, PublishEvent} from './publish';
-import {Observable} from 'rxjs';
+import { from, Observable, race, Subject, throwError } from "rxjs";
 import {CentipodError, CentipodErrorCode} from './error';
 import semver from 'semver';
 import { Readable } from "stream";
 import { ServiceStatus, TranspilingStatus } from "../../../types";
+import { catchError, first, mergeAll, finalize, takeUntil } from "rxjs/operators";
+import Timer = NodeJS.Timer;
+import debug from 'debug';
 
 const TWO_MINUTES = 2 * 60 * 1000;
 const DEFAULT_DAEMON_TIMEOUT = TWO_MINUTES;
@@ -179,42 +182,53 @@ export class Workspace {
   ): Promise<IDaemonCommandResult> {
     const logsConditions = Array.isArray(daemonConfig) ? daemonConfig : [daemonConfig];
     let killed = false;
-    cmdProcess.catch((crashed) => {
-      if (!killed) {
-        console.debug('Daemon crashed');
-        throw crashed;
-      }
+    const crashed$ = new Observable<IDaemonCommandResult>((obs) => {
+      cmdProcess.catch((crashed) => {
+        if (!killed) {
+          debug('centipod/run')('Daemon crashed');
+          obs.error(crashed);
+        }
+      });
     });
-    console.debug('Verifying logs conditions');
-    const logsConditionsMet$ = logsConditions.map((condition) => new Promise<IDaemonCommandResult>((resolve, reject) => {
+    debug('centipod/run')('Verifying logs conditions');
+    const timers: Timer[] = [];
+    const logsConditionsMet$ = logsConditions.map((condition) => new Observable<IDaemonCommandResult>((obs) => {
       const logStream = cmdProcess[condition.stdio];
       if (!logStream) {
-        return reject('Log stream not readable, did you try to run a daemon cmd using stdio inherit ?')
+        return obs.error('Log stream not readable, did you try to run a daemon cmd using stdio inherit ?')
       }
       const timeout = condition.timeout || DEFAULT_DAEMON_TIMEOUT;
-      const timer = setTimeout(() => reject(`Timeout (${timeout}ms) for log condition exceeded`), timeout);
-      const abort = setInterval(() => {
-        if (killed) {
-          console.debug('Killed by someone else');
-          clearInterval(abort);
-          return reject("Process killed");
-        };
-      }, 200);
+      const timer = setTimeout(() => obs.error(`Timeout (${timeout}ms) for log condition exceeded`), timeout);
+      timers.push(timer);
       logStream.on('data', (chunk: string | Buffer) => {
-        console.log('[child process]', chunk.toString());
+        debug('centipod/run')('[child process]', chunk.toString());
         if (condition.matcher === 'contains' && chunk.toString().includes(condition.value)) {
-          console.debug('Condition resolved for', condition);
+          debug('centipod/run')('Condition resolved for', condition);
           clearTimeout(timer);
-          return condition.type === 'success' ? resolve({daemon: true, process: cmdProcess, took: Date.now() - startedAt}) : reject(`Log condition explicitly failed : ${JSON.stringify(condition)}`);
+          if (condition.type === 'success') {
+            obs.next({daemon: true, process: cmdProcess, took: Date.now() - startedAt});
+            return obs.complete();
+          }
+          return obs.error(`Log condition explicitly failed : ${JSON.stringify(condition)}`);
         }
       });
     }));
-    return Promise.race(logsConditionsMet$).catch((e) => {
-      console.error('Error happened, killing process');
-      killed = true;
-      cmdProcess.kill();
-      console.debug('Rethrow', e);
-      throw e;
+
+    const race$ = race(...logsConditionsMet$, crashed$).pipe(
+      catchError((e) => {
+        debug('centipod/run')('Error happened, killing process');
+        killed = true;
+        cmdProcess.kill();
+        debug('centipod/run')('Rethrow', e);
+        return throwError(e);
+      }),
+      finalize(() => {
+        debug('centipod/run')('Flushing timers');
+        timers.forEach((timer) => clearTimeout(timer));
+      })
+    )
+    return new Promise<IDaemonCommandResult>((resolve, reject) => {
+      race$.subscribe({ next: resolve, error: reject });
     });
   }
 
@@ -227,7 +241,7 @@ export class Workspace {
     const startedAt = Date.now();
     const _cmd = typeof cmd === 'string' ? cmd : cmd.run;
     const _fullCmd = args ? [_cmd, args].join(' ') : _cmd;
-    console.debug('Launching process');
+    debug('centipod/run')('Launching process');
     const _process = command(_fullCmd, {
       cwd: this.root,
       all: true,
@@ -235,14 +249,14 @@ export class Workspace {
       shell: process.platform === 'win32',
       stdio,
     });
-    console.debug('Process laucnhed');
+    debug('centipod/run')('Process laucnhed');
     if (typeof cmd !== 'string' && cmd.daemon) {
-      console.debug('Command flagged as daemon');
+      debug('centipod/run')('Command flagged as daemon');
       return this._handleDaemon(cmd.daemon, _process, startedAt);
     } else {
-      console.debug('Command not flagged as daemon');
+      debug('centipod/run')('Command not flagged as daemon');
       const result = await _process;
-      console.debug('Command terminated', result);
+      debug('centipod/run')('Command terminated', result);
       return {...result, took: Date.now() - startedAt, daemon: false };
     }
   }
@@ -259,11 +273,11 @@ export class Workspace {
     const _args = Array.isArray(args) ? args : [args];
     let idx = 0;
     for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
-      console.debug('Do run command', { cmd: _cmd, args: _args[idx], env, stdio});
+      debug('centipod/run')('Do run command', { cmd: _cmd, args: _args[idx], env, stdio});
       results.push(await this._runCommand(_cmd, _args[idx], env, stdio));
       idx++;
     }
-    console.debug('All commands run', results);
+    debug('centipod/run')('All commands run', results);
     return results;
   }
 
@@ -275,28 +289,28 @@ export class Workspace {
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<IProcessResult> {
     try {
-      console.debug('Do run commands');
+      debug('centipod/run')('Do run commands');
       const results = await this._runCommands(cmd, args, env, stdio);
       try {
-        console.debug('All success, caching result');
+        debug('centipod/run')('All success, caching result');
         const toCache: Array<ICommandResult> = results.filter((r) => !isDaemon(r)) as Array<ICommandResult>;
         await cache.write(toCache);
-        console.debug('Successfully cached');
-        console.debug('Emitting');
+        debug('centipod/run')('Successfully cached');
+        debug('centipod/run')('Emitting');
         return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
       } catch (e) {
-        console.error('Error writing cache');
-        console.debug('Emitting');
+        debug('centipod/run')('Error writing cache');
+        debug('centipod/run')('Emitting');
         return { commands: results, fromCache: false, overall: results.reduce((acc, val) => acc + val.took, 0) };
       }
     } catch (e) {
-      console.debug('Command failed, invalidating cache');
+      debug('centipod/run')('Command failed, invalidating cache');
       try {
         await cache.invalidate();
       } catch (err) {
-        console.error('Error invalidating cache', err);
+        debug('centipod/run')('Error invalidating cache', err);
       }
-      console.debug('Rethrowing');
+      debug('centipod/run')('Rethrowing');
       throw e;
     }
   }
@@ -310,19 +324,19 @@ export class Workspace {
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<IProcessResult> {
     let now = Date.now();
-    console.debug('Running command', { cmd, args, env });
+    debug('centipod/run')('Running command', { cmd, args, env });
     const cache = new Cache(this, cmd, args, env, options);
     try {
       const cachedOutputs = await cache.read();
-      console.debug('Cache read', cachedOutputs);
+      debug('centipod/run')('Cache read', cachedOutputs);
       if (!force && cachedOutputs) {
-        console.debug('From cache');
+        debug('centipod/run')('From cache');
         return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true };
       }
-      console.debug('Cache outdated');
+      debug('centipod/run')('Cache outdated');
       return this._runCommandsAndCache(cache, cmd, args, env, stdio);
     } catch (e) {
-      console.debug('Error reading cache');
+      debug('centipod/run')('Error reading cache');
       // Error reading from cache
       return this._runCommandsAndCache(cache, cmd, args, env, stdio);
     }
@@ -337,19 +351,19 @@ export class Workspace {
     options: ICacheOptions = {},
   ): Observable<IProcessResult> {
     return new Observable<IProcessResult>((obs) => {
-      console.debug('Create cache');
+      debug('centipod/run')('Create cache');
       const cache = new Cache(this, cmd, args, env, options);
-      console.debug('Running cmd');
+      debug('centipod/run')('Running cmd');
       this._run(cmd, force, args, env, options, stdio)
         .then((result) => {
-          console.debug('Success', result);
+          debug('centipod/run')('Success', result);
           obs.next(result)
         })
         .catch((error) => {
-          console.debug('Errored', error);
+          debug('centipod/run')('Errored', error);
           obs.error(error);
         }).finally(() => {
-          console.debug('Completed');
+          debug('centipod/run')('Completed');
           obs.complete();
       });
     });

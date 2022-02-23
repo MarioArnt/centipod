@@ -1,7 +1,7 @@
 (async () => {
   console.info('Launching...');
   setTimeout(() => {
-    console.info('Something wrong happen');
+    console.error('Something really bad happened');
     process.exit(1);
   }, 200);
 })();
