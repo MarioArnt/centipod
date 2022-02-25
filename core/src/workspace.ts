@@ -5,7 +5,7 @@ import {join, relative} from 'path';
 import {INpmInfos, Package} from './package';
 import {git} from './git';
 import {sync as glob} from 'fast-glob';
-import { command, ExecaChildProcess, ExecaError } from "execa";
+import { command, ExecaChildProcess, ExecaError, ExecaReturnValue } from "execa";
 import { ICommandConfig, IConfig, ILogsCondition, loadConfig } from "./config";
 import {
   CommandResult,
@@ -24,6 +24,7 @@ import { ServiceStatus, TranspilingStatus } from "../../../types";
 import { catchError, first, mergeAll, finalize, takeUntil } from "rxjs/operators";
 import Timer = NodeJS.Timer;
 import debug from 'debug';
+import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
 
 const TWO_MINUTES = 2 * 60 * 1000;
 const DEFAULT_DAEMON_TIMEOUT = TWO_MINUTES;
@@ -232,7 +233,31 @@ export class Workspace {
     });
   }
 
+  private _logsHandlers: Map<string, AbstractLogsHandler<unknown>> = new Map();
+
+  logs(name: string): AbstractLogsHandler<unknown> | undefined {
+    return this._logsHandlers.get(name);
+  }
+
+  addLogsHandler(handler: AbstractLogsHandler<unknown>) {
+    if (this._logsHandlers.has(handler.name)) {
+      throw new Error(`Log handler with name ${handler.name} already registered`)
+    }
+    this._logsHandlers.set(handler.name, handler);
+  }
+
+  private _handleLogs(
+    action: keyof ILogsHandler,
+    target: string,
+    arg?: string | (string | Buffer) | (ExecaReturnValue | ExecaError),
+  ) {
+    for (const handler of this._logsHandlers.values()) {
+      handler[action](target, arg as (string & (string | Buffer)) & (ExecaReturnValue | ExecaError));
+    }
+  }
+
   private async _runCommand(
+    target: string,
     cmd: string | ICommandConfig,
     args?: string,
     env: {[key: string]: string} = {},
@@ -242,6 +267,7 @@ export class Workspace {
     const _cmd = typeof cmd === 'string' ? cmd : cmd.run;
     const _fullCmd = args ? [_cmd, args].join(' ') : _cmd;
     debug('centipod/run')('Launching process');
+    this._handleLogs('commandStarted', this, target, _fullCmd);
     const _process = command(_fullCmd, {
       cwd: this.root,
       all: true,
@@ -249,48 +275,62 @@ export class Workspace {
       shell: process.platform === 'win32',
       stdio,
     });
-    debug('centipod/run')('Process laucnhed');
+
+    debug('centipod/run')('Process launched');
+    _process.all?.on('data', (chunk) => {
+      this._handleLogs('append', this, target, chunk);
+    });
     if (typeof cmd !== 'string' && cmd.daemon) {
       debug('centipod/run')('Command flagged as daemon');
       return this._handleDaemon(cmd.daemon, _process, startedAt);
     } else {
       debug('centipod/run')('Command not flagged as daemon');
-      const result = await _process;
-      debug('centipod/run')('Command terminated', result);
-      return {...result, took: Date.now() - startedAt, daemon: false };
+      try {
+        const result = await _process;
+        debug('centipod/run')('Command terminated', result);
+        this._handleLogs('commandEnded', this, target, result);
+        return {...result, took: Date.now() - startedAt, daemon: false };
+      } catch (e) {
+        if ((e as ExecaError).exitCode) {
+          this._handleLogs('commandEnded', this, target, e as ExecaError);
+        }
+        throw e;
+      }
     }
   }
 
   private async _runCommands(
-    cmd: string,
+    target: string,
     args: string[] | string = [],
     env: {[key: string]: string} = {},
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<Array<CommandResult>> {
     const results: Array<CommandResult> = [];
-    const config = this.config[cmd];
+    const config = this.config[target];
     const cmds = config.cmd;
     const _args = Array.isArray(args) ? args : [args];
     let idx = 0;
+    this._handleLogs('open', this, target);
     for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
       debug('centipod/run')('Do run command', { cmd: _cmd, args: _args[idx], env, stdio});
-      results.push(await this._runCommand(_cmd, _args[idx], env, stdio));
+      results.push(await this._runCommand(target, _cmd, _args[idx], env, stdio));
       idx++;
     }
+    this._handleLogs('close', this, target);
     debug('centipod/run')('All commands run', results);
     return results;
   }
 
   private async _runCommandsAndCache(
     cache: Cache,
-    cmd: string,
+    target: string,
     args: string[] | string = [],
     env: {[key: string]: string} = {},
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<IProcessResult> {
     try {
       debug('centipod/run')('Do run commands');
-      const results = await this._runCommands(cmd, args, env, stdio);
+      const results = await this._runCommands(target, args, env, stdio);
       try {
         debug('centipod/run')('All success, caching result');
         const toCache: Array<ICommandResult> = results.filter((r) => !isDaemon(r)) as Array<ICommandResult>;
@@ -316,7 +356,7 @@ export class Workspace {
   }
 
   private async _run(
-    cmd: string,
+    target: string,
     force = false,
     args: string[] | string = [],
     env: {[key: string]: string} = {},
@@ -324,8 +364,8 @@ export class Workspace {
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<IProcessResult> {
     let now = Date.now();
-    debug('centipod/run')('Running command', { cmd, args, env });
-    const cache = new Cache(this, cmd, args, env, options);
+    debug('centipod/run')('Running command', { target, args, env });
+    const cache = new Cache(this, target, args, env, options);
     try {
       const cachedOutputs = await cache.read();
       debug('centipod/run')('Cache read', cachedOutputs);
@@ -334,16 +374,16 @@ export class Workspace {
         return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true };
       }
       debug('centipod/run')('Cache outdated');
-      return this._runCommandsAndCache(cache, cmd, args, env, stdio);
+      return this._runCommandsAndCache(cache, target, args, env, stdio);
     } catch (e) {
       debug('centipod/run')('Error reading cache');
       // Error reading from cache
-      return this._runCommandsAndCache(cache, cmd, args, env, stdio);
+      return this._runCommandsAndCache(cache, target, args, env, stdio);
     }
   }
 
   run(
-    cmd: string,
+    target: string,
     force = false,
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
@@ -351,10 +391,8 @@ export class Workspace {
     options: ICacheOptions = {},
   ): Observable<IProcessResult> {
     return new Observable<IProcessResult>((obs) => {
-      debug('centipod/run')('Create cache');
-      const cache = new Cache(this, cmd, args, env, options);
       debug('centipod/run')('Running cmd');
-      this._run(cmd, force, args, env, options, stdio)
+      this._run(target, force, args, env, options, stdio)
         .then((result) => {
           debug('centipod/run')('Success', result);
           obs.next(result)

@@ -8,6 +8,7 @@ import { ReleaseType } from 'semver';
 import { CentipodError, CentipodErrorCode } from './error';
 import { Observable } from 'rxjs';
 import { RunCommandEvent } from './process';
+import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
 
 export class Project extends Workspace {
   // Attributes
@@ -80,6 +81,12 @@ export class Project extends Workspace {
       }
     }
     return [...sortedWorkspaces];
+  }
+
+  registerLogsHandler(handler: new (workspace: Workspace) => AbstractLogsHandler<unknown>) {
+    for (const workspace of this._workspaces.values()) {
+      workspace.addLogsHandler(new handler(workspace));
+    }
   }
 
   runCommand(cmd: string, options: RunOptions): Observable<RunCommandEvent> {
