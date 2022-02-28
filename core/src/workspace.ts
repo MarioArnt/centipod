@@ -267,7 +267,7 @@ export class Workspace {
     const _cmd = typeof cmd === 'string' ? cmd : cmd.run;
     const _fullCmd = args ? [_cmd, args].join(' ') : _cmd;
     debug('centipod/run')('Launching process');
-    this._handleLogs('commandStarted', this, target, _fullCmd);
+    this._handleLogs('commandStarted', target, _fullCmd);
     const _process = command(_fullCmd, {
       cwd: this.root,
       all: true,
@@ -278,7 +278,7 @@ export class Workspace {
 
     debug('centipod/run')('Process launched');
     _process.all?.on('data', (chunk) => {
-      this._handleLogs('append', this, target, chunk);
+      this._handleLogs('append', target, chunk);
     });
     if (typeof cmd !== 'string' && cmd.daemon) {
       debug('centipod/run')('Command flagged as daemon');
@@ -288,11 +288,11 @@ export class Workspace {
       try {
         const result = await _process;
         debug('centipod/run')('Command terminated', result);
-        this._handleLogs('commandEnded', this, target, result);
+        this._handleLogs('commandEnded', target, result);
         return {...result, took: Date.now() - startedAt, daemon: false };
       } catch (e) {
         if ((e as ExecaError).exitCode) {
-          this._handleLogs('commandEnded', this, target, e as ExecaError);
+          this._handleLogs('commandEnded', target, e as ExecaError);
         }
         throw e;
       }
@@ -310,13 +310,13 @@ export class Workspace {
     const cmds = config.cmd;
     const _args = Array.isArray(args) ? args : [args];
     let idx = 0;
-    this._handleLogs('open', this, target);
+    this._handleLogs('open', target);
     for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
       debug('centipod/run')('Do run command', { cmd: _cmd, args: _args[idx], env, stdio});
       results.push(await this._runCommand(target, _cmd, _args[idx], env, stdio));
       idx++;
     }
-    this._handleLogs('close', this, target);
+    this._handleLogs('close', target);
     debug('centipod/run')('All commands run', results);
     return results;
   }
