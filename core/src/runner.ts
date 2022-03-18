@@ -1,17 +1,18 @@
-import { concat, from, Observable, of } from 'rxjs';
-import { catchError, concatAll, concatMap, map, mergeAll } from 'rxjs/operators';
+import { concat, debounceTime, from, Observable, of, Subject } from "rxjs";
+import { catchError, concatAll, concatMap, map, mergeAll, takeUntil } from "rxjs/operators";
 import {
   IErrorInvalidatingCacheEvent,
   IProcessResult,
   IResolvedTarget,
   IRunCommandErrorEvent,
   RunCommandEvent,
-  RunCommandEventEnum,
-} from './process';
-import { Project } from './project';
-import { Workspace } from './workspace';
-import { OrderedTargets, TargetsResolver } from './targets';
+  RunCommandEventEnum
+} from "./process";
+import { Project } from "./project";
+import { Workspace } from "./workspace";
+import { OrderedTargets, TargetsResolver } from "./targets";
 import { ICacheOptions } from "./cache";
+import { Watcher } from "./watcher";
 
 export interface ICommonRunOptions{
   mode: 'parallel' | 'topological';
@@ -54,33 +55,7 @@ export class Runner {
     private readonly _cacheOptions: ICacheOptions = {},
   ) {}
 
-  /*watch(cmd: string, options: RunOptions, args: string[] | string = []): Observable<RunCommandEvent> {
-    return new Observable((obs) => {
-      this._resolveTargets(cmd, options).then((targets) => {
-        obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets });
-        if (!targets.length) {
-          return obs.complete();
-        }
-
-        const parallelTasks$ = from(targets.map((w) => this._runForWorkspace(w, cmd, options.force, args, options.stdio))).pipe(mergeAll(this._concurrency));
-
-        const sourcesChanged$ = new Subject<void>();
-        const shouldInterrupt$ = new Subject<void>();
-        //const toWatch = new Map<Workspace, string[]>
-        if (options.watch) {
-          targets.forEach((target) => {
-            const patterns = target.workspace.config[cmd].src;
-            patterns.forEach((glob) => {
-              watch(glob).on('all', (event, path) => {
-                sourcesChanged$.next();
-                obs.next({ type: RunCommandEventEnum.SOURCES_CHANGED, event, path });
-              });
-            });
-          })
-        }
-      });
-    });
-  }*/
+  /**/
 
   private _scheduleTasks(
     cmd: string,
@@ -89,11 +64,12 @@ export class Runner {
     args: string[] | string = [],
     env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent> {
+    console.debug('Schedule tasks');
     const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env));
     return from(steps$).pipe(concatAll());
   }
 
-  runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}): Observable<RunCommandEvent> {
+  runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}, watch = false, debounce = 1000): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       const targets = new TargetsResolver(this._project);
       targets.resolve(cmd, options).then((targets) => {
@@ -102,13 +78,81 @@ export class Runner {
         if (!targets.length) {
           return obs.complete();
         }
-        const tasks$ = this._scheduleTasks(cmd, targets, options, args, env);
-        tasks$.subscribe(
-          (evt) => obs.next(evt),
-          (err) => obs.error(err),
-          () => obs.complete(),
-        )
-      })
+        if (!watch) {
+          const tasks$ = this._scheduleTasks(cmd, targets, options, args, env);
+          tasks$.subscribe(
+            (evt) => obs.next(evt),
+            (err) => obs.error(err),
+            () => obs.complete(),
+          )
+        } else {
+          console.debug('Running target', cmd, 'in watch mode');
+          let currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
+          const watcher = new Watcher(targets, cmd, debounce);
+          const shouldAbort$ = new Subject<void>();
+          const sourcesChange$ = watcher.watch();
+          console.debug('Watching sources');
+          let currentStep: IResolvedTarget[] | undefined;
+          const isBeforeOrEqualsCurrentStep = (impactedStep: IResolvedTarget[] | undefined) => {
+            if(!currentStep || !impactedStep) {
+              return false;
+            }
+            return targets.indexOf(impactedStep) <= targets.indexOf(currentStep);
+          }
+          const _workspaceWithRunningProcesses = new Set<Workspace>();
+          const executeCurrentTasks = () => {
+            console.debug('Executing current tasks');
+            currentTasks$.pipe(takeUntil(shouldAbort$)).subscribe((evt) => {
+              switch (evt.type) {
+                case RunCommandEventEnum.NODE_STARTED:
+                  currentStep = targets.find((step) => step.some((target) => target.workspace.name === evt.workspace.name));
+                  if (currentStep) {
+                    console.debug('Current step updated', targets.indexOf(currentStep));
+                  }
+                  _workspaceWithRunningProcesses.add(evt.workspace);
+                  break;
+                case RunCommandEventEnum.NODE_PROCESSED:
+                case RunCommandEventEnum.NODE_ERRORED:
+                  _workspaceWithRunningProcesses.delete(evt.workspace);
+                  break;
+              }
+              obs.next(evt);
+            }, (err) => {
+              obs.error(err);
+            }, () => {
+              console.debug('Current tasks executed watching for changes');
+            });
+          }
+          shouldAbort$.subscribe(() => {
+            console.log('TODO: Kill impacted processes');
+            // If current step is impacted step, only kill impacted target
+            _workspaceWithRunningProcesses.forEach((workspace) => {
+              obs.next({ type: RunCommandEventEnum.NODE_INTERRUPTED, workspace })
+              workspace.killAll(cmd);
+            });
+            // If previous kill all targets running
+          });
+          sourcesChange$.pipe(debounceTime(debounce)).subscribe((change) => {
+            console.debug('Source changed', change.target.workspace.name);
+            const impactedTarget = change.target;
+            obs.next({ type: RunCommandEventEnum.SOURCES_CHANGED, ...change })
+            console.debug('Impacted target', change.target.workspace.name);
+            const impactedStep = targets.find((step) => step.some((t) => t.workspace.name === impactedTarget.workspace.name));
+            if (impactedStep) {
+              console.debug('Impacted step updated', targets.indexOf(impactedStep));
+            }
+            if (isBeforeOrEqualsCurrentStep(impactedStep)) {
+              console.debug('Impacted step before or same than current step. Should abort')
+              shouldAbort$.next();
+              // TODO: Reschedule only tasks impacted
+              currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
+              console.debug('Current tasks updated');
+              executeCurrentTasks();
+            }
+          });
+          executeCurrentTasks();
+        }
+      });
     });
   }
 
@@ -123,6 +167,7 @@ export class Runner {
     env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent> {
     const executions = new Set<CaughtProcessExecution>();
+    console.log('Running step', targets.indexOf(step));
     const tasks$ = step.map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),

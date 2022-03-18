@@ -256,6 +256,12 @@ export class Workspace {
     }
   }
 
+  private _processes = new Map<string, Map<string, ExecaChildProcess>>();
+
+  killAll(target: string) {
+    this._processes.forEach((cmdProcesses) => cmdProcesses.forEach((cp) => cp.kill()));
+  }
+
   private async _runCommand(
     target: string,
     cmd: string | ICommandConfig,
@@ -268,6 +274,7 @@ export class Workspace {
     const _fullCmd = args ? [_cmd, args].join(' ') : _cmd;
     debug('centipod/run')('Launching process');
     this._handleLogs('commandStarted', target, _fullCmd);
+    const cmdId = _fullCmd + '-' + Date.now();
     const _process = command(_fullCmd, {
       cwd: this.root,
       all: true,
@@ -275,7 +282,11 @@ export class Workspace {
       shell: process.platform === 'win32',
       stdio,
     });
-
+    if (this._processes.has(target)) {
+      this._processes.get(target)?.set(cmdId, _process);
+    } else {
+      this._processes.set(target, new Map([[cmdId, _process]]));
+    }
     debug('centipod/run')('Process launched');
     _process.all?.on('data', (chunk) => {
       this._handleLogs('append', target, chunk);
@@ -288,6 +299,7 @@ export class Workspace {
       try {
         const result = await _process;
         debug('centipod/run')('Command terminated', result);
+        this._processes.get(target)?.delete(cmdId);
         this._handleLogs('commandEnded', target, result);
         return {...result, took: Date.now() - startedAt, daemon: false };
       } catch (e) {

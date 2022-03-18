@@ -38,6 +38,8 @@ export enum RunCommandEventEnum {
   NODE_SKIPPED,
   CACHE_INVALIDATED,
   ERROR_INVALIDATING_CACHE,
+  SOURCES_CHANGED,
+  NODE_INTERRUPTED,
 }
 
 export interface IResolvedTarget {
@@ -49,6 +51,18 @@ export interface IResolvedTarget {
 export interface ITargetsResolvedEvent {
   type: RunCommandEventEnum.TARGETS_RESOLVED;
   targets: IResolvedTarget[];
+}
+
+export interface ISourceChangedEvent {
+  type: RunCommandEventEnum.SOURCES_CHANGED;
+  target: IResolvedTarget;
+  path: string;
+  event: string;
+}
+
+export interface INodeInterruptedEvent {
+  type: RunCommandEventEnum.NODE_INTERRUPTED;
+  workspace: Workspace;
 }
 
 export interface INodeSkippedEvent extends IResolvedTarget {
@@ -83,7 +97,7 @@ export interface IRunCommandErrorEvent {
   workspace: Workspace;
 }
 
-export type RunCommandEvent = IRunCommandStartedEvent | ITargetsResolvedEvent | IRunCommandSuccessEvent | IRunCommandErrorEvent | INodeSkippedEvent | ICacheInvalidatedEvent | IErrorInvalidatingCacheEvent;
+export type RunCommandEvent = IRunCommandStartedEvent | ITargetsResolvedEvent | IRunCommandSuccessEvent | IRunCommandErrorEvent | INodeSkippedEvent | ICacheInvalidatedEvent | IErrorInvalidatingCacheEvent | INodeInterruptedEvent | ISourceChangedEvent;
 
 export const isTargetResolvedEvent = (event: RunCommandEvent): event is  ITargetsResolvedEvent => event.type === RunCommandEventEnum.TARGETS_RESOLVED;
 export const isNodeSucceededEvent = (event: RunCommandEvent): event is  IRunCommandSuccessEvent => event.type === RunCommandEventEnum.NODE_PROCESSED;
