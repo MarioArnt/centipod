@@ -350,7 +350,7 @@ describe('[class] Runner', () => {
       });
       return from(fakeEvents$).pipe(mergeAll());
     };
-    it('should do nothing if impacted process has not started yet - [single-step parallel]', async () => {
+    it('should handle single-interruptions in running step and when idle - [parallel]', async () => {
       stubs.targets?.returns(resolveAfter([
         [
           { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
@@ -363,19 +363,51 @@ describe('[class] Runner', () => {
       ], 12));
       stubs.watch?.returns(mockSourcesChange([
         { workspaceName: '@org/api', delay: 150},
-        { workspaceName: '@org/app-a', delay: 250},
+        { workspaceName: '@org/app-a', delay: 450},
+      ]));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 }, // +100ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 200 }, // + 200ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 200 }, // + 200ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 200 }, // + 400ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 10 },
+      ]);
+      try {
+        const runner = new Runner(project, 4);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        }, [], {}, true, 8);
+        await expectObservable(Date.now(), execution$, '0-444333-1-7813-1-7-3-1', {}, undefined, 500);
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it('should do nothing if impacted process has not started yet - [parallel]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubs.watch?.returns(mockSourcesChange([
+        { workspaceName: '@org/app-a', delay: 50},
+        { workspaceName: '@org/api', delay: 150},
       ]));
       stubRun(stubs.run!, [
         // Initial
+        // 0-333444-1-78-1-31-7-3-1
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 }, // +0ms
         { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 },
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 200 },
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 200 },
 
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 20 },
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 20 },
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 20 },
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 }, // +100ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 },
 
-        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 20 },
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 }, // + 200ms
       ]);
       try {
         const runner = new Runner(project, 2);
@@ -383,12 +415,95 @@ describe('[class] Runner', () => {
           mode: 'parallel',
           force: false,
         }, [], {}, true, 8);
-        await expectObservable(Date.now(), execution$, '0-444333-1-7813-1-7-31', null, undefined, 500);
+        await expectObservable(Date.now(), execution$, '0-33-7-1133-7-1134-1', {}, undefined, 500);
       } catch (e) {
         expect(e).toBeFalsy();
       }
     });
-    it.skip('kill and recompile if impacted process has is running - [single-step parallel]', async () => {
+    it('should do nothing if impacted target is not affected - [parallel]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: false, hasCommand: true },
+        ]
+      ], 12));
+      stubs.watch?.returns(mockSourcesChange([
+        { workspaceName: '@org/api', delay: 30},
+      ]));
+      stubRun(stubs.run!, [
+        // Initial
+        // 0-333444-1-78-1-31-7-3-1
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 }, // +0ms
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 },
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 },
+        { resolve: true, args: ['lint', false, [], 'pipe', {}], delay: 100 },
+        // +100ms
+      ]);
+      try {
+        const runner = new Runner(project, 8);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        }, [], {}, true, 8);
+        await expectObservable(Date.now(), execution$, '0-333344-7-1111', {}, undefined, 500);
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.only('should handle correctly multiple interruption - [parallel]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubs.watch?.returns(mockSourcesChange([
+        // During First round
+        { workspaceName: '@org/workspace-a', delay: 130},
+        { workspaceName: '@org/api', delay: 65},
+        // After first round
+        { workspaceName: '@org/api', delay: 210},
+        { workspaceName: '@org/app-a', delay: 210},
+        // During second round
+        { workspaceName: '@org/app-b', delay: 250},
+        { workspaceName: '@org/workspace-a', delay: 310},
+        // After second round
+        { workspaceName: '@org/app-a', delay: 380},
+        { workspaceName: '@org/api', delay: 420},
+
+      ]));
+      stubRun(stubs.run!, [
+        // First round
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 100 }, // + 0ms
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 150 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 200 },
+        // Second round
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 120 }, // +210ms
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 140 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 160 },
+        // Third round
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 23 }, // +370ms
+      ])
+      try {
+        const runner = new Runner(project, 8);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        }, [], {}, true, 20);
+        await expectObservable(Date.now(), execution$, '0-444333-1778833-11-73-7837831-11-7-3-1', {});
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.skip('should handle correctly errored node - [parallel]', async () => {
       stubs.targets?.returns(resolveAfter([
         [
           { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
@@ -419,7 +534,7 @@ describe('[class] Runner', () => {
         expect(e).toBeFalsy();
       }
     });
-    it.skip('should recompile if impacted process has is running - [single-step parallel]', async () => {
+    it.skip('should handle correctly interruption in previous step - [topological]', async () => {
       stubs.targets?.returns(resolveAfter([
         [
           { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
@@ -450,7 +565,131 @@ describe('[class] Runner', () => {
         expect(e).toBeFalsy();
       }
     });
-    it.skip('should handle correctly multiple interruption - [single-step parallel]', async () => {
+    it.skip('should handle correctly interruption in subsequent step - [topological]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 14 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 23 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        });
+        await expectObservable(Date.now(), execution$, '0-444433-11', {
+          1: ['@org/workspace-a', '@org/api'],
+          2: [],
+          4: ['@org/workspace-c', '@org/workspace-b', '@org/app-a', '@org/app-b'],
+          3: ['@org/workspace-a', '@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.skip('should handle correctly interruption in current step (running node) - [topological]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 14 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 23 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        });
+        await expectObservable(Date.now(), execution$, '0-444433-11', {
+          1: ['@org/workspace-a', '@org/api'],
+          2: [],
+          4: ['@org/workspace-c', '@org/workspace-b', '@org/app-a', '@org/app-b'],
+          3: ['@org/workspace-a', '@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.skip('should handle correctly interruption in current step (processed node) - [topological]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 14 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 23 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        });
+        await expectObservable(Date.now(), execution$, '0-444433-11', {
+          1: ['@org/workspace-a', '@org/api'],
+          2: [],
+          4: ['@org/workspace-c', '@org/workspace-b', '@org/app-a', '@org/app-b'],
+          3: ['@org/workspace-a', '@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.skip('should handle correctly interruption in current step (queued node) - [topological]', async () => {
+      stubs.targets?.returns(resolveAfter([
+        [
+          { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
+          { workspace: project.workspaces.get('@org/workspace-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/workspace-c')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-a')!, affected: false, hasCommand: true },
+          { workspace: project.workspaces.get('@org/app-b')!, affected: true, hasCommand: false },
+          { workspace: project.workspaces.get('@org/api')!, affected: true, hasCommand: true },
+        ]
+      ], 12));
+      stubRun(stubs.run!, [
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 14 },
+        { resolve: true, args: ['lint', false, [], 'pipe'], delay: 23 },
+      ])
+      try {
+        const runner = new Runner(project);
+        const execution$ = runner.runCommand('lint', {
+          mode: 'parallel',
+          force: false,
+        });
+        await expectObservable(Date.now(), execution$, '0-444433-11', {
+          1: ['@org/workspace-a', '@org/api'],
+          2: [],
+          4: ['@org/workspace-c', '@org/workspace-b', '@org/app-a', '@org/app-b'],
+          3: ['@org/workspace-a', '@org/api'],
+        });
+      } catch (e) {
+        expect(e).toBeFalsy();
+      }
+    });
+    it.skip('should handle correctly multiple interruption complex scenario - [topological]', async () => {
       stubs.targets?.returns(resolveAfter([
         [
           { workspace: project.workspaces.get('@org/workspace-a')!, affected: true, hasCommand: true },
