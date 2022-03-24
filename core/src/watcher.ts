@@ -1,12 +1,16 @@
-import { Subject, Observable, throwError } from "rxjs";
+import { Subject, Observable } from "rxjs";
 import { OrderedTargets } from "./targets";
 import { IResolvedTarget } from "./process";
 import { watch, FSWatcher } from "chokidar";
 
-export interface WatchEvent {
-  target: IResolvedTarget;
+export interface IChangeEvent {
   event: "add" | "addDir" | "change" | "unlink" | "unlinkDir";
   path: string;
+}
+
+export interface WatchEvent {
+  target: IResolvedTarget;
+  events: Array<IChangeEvent>;
 }
 
 export class Watcher {
@@ -18,27 +22,37 @@ export class Watcher {
     this.targets = steps.flat();
   }
 
-  private _events$ = new Subject<WatchEvent>();
+  private _events$ = new Subject<Array<WatchEvent>>();
 
-  watch(): Observable<WatchEvent> {
+  watch(): Observable<Array<WatchEvent>> {
     this.unwatch();
+    const filesChanges = new Map<IResolvedTarget, Array<IChangeEvent>>();
     this.targets.forEach((target) => {
       const patterns = target.workspace.config[this.cmd].src;
       patterns?.forEach((glob) => {
         this._watcher = watch(glob).on('all', (event, path) => {
-          this._events$.next({
-            target,
-            event,
-            path,
-          });
+          if (filesChanges.has(target)) {
+            filesChanges.get(target)?.push({ event, path });
+          } else {
+            filesChanges.set(target, [{ event, path }]);
+          }
         });
       });
     });
+    setInterval(() => {
+      if (filesChanges.size) {
+        this._events$.next(Array.from(filesChanges.entries()).map(([target, events]) => ({
+          target,
+          events,
+        })));
+      }
+      filesChanges.clear();
+    }, this.debounce);
     return this._events$.asObservable();
   }
 
   unwatch() {
     this._watcher?.close();
-    this._events$ = new Subject<WatchEvent>();
+    this._events$ = new Subject<Array<WatchEvent>>();
   }
 }

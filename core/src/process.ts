@@ -1,6 +1,6 @@
 import { ExecaChildProcess, ExecaReturnValue } from "execa";
 import { Workspace } from "./workspace";
-
+import { IChangeEvent } from "./watcher";
 
 export interface IProcessResult {
   commands: Array<CommandResult>;
@@ -48,6 +48,8 @@ export interface IResolvedTarget {
   hasCommand: boolean;
 }
 
+export type Step = IResolvedTarget[];
+
 export interface ITargetsResolvedEvent {
   type: RunCommandEventEnum.TARGETS_RESOLVED;
   targets: IResolvedTarget[];
@@ -56,8 +58,7 @@ export interface ITargetsResolvedEvent {
 export interface ISourceChangedEvent {
   type: RunCommandEventEnum.SOURCES_CHANGED;
   target: IResolvedTarget;
-  path: string;
-  event: string;
+  events: Array<IChangeEvent>;
 }
 
 export interface INodeInterruptedEvent {
