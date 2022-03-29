@@ -2,7 +2,7 @@ import { join, parse } from 'path';
 import { existsSync } from 'fs';
 import { CentipodError, CentipodErrorCode } from './error';
 
-export const resloveProjectRoot = (): string => {
+export const resolveProjectRoot = (): string => {
   const root = parse(process.cwd()).root;
   const recursivelyFind = (path: string): string => {
     if (path === root) {

@@ -21,11 +21,11 @@ export type CommandResult = IDaemonCommandResult | ICommandResult;
 
 export interface IDaemonCommandResult {
   daemon: true;
-  process: ExecaChildProcess<string>;
+  process: ExecaChildProcess;
   took: number;
 }
 
-export interface ICommandResult extends ExecaReturnValue<string> {
+export interface ICommandResult extends ExecaReturnValue {
   daemon: false;
   took: number;
 }

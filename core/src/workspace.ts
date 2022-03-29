@@ -16,12 +16,10 @@ import {
 } from "./process";
 import { Cache, ICacheOptions } from "./cache";
 import {Publish, PublishActions, PublishEvent} from './publish';
-import { from, Observable, race, Subject, throwError } from "rxjs";
+import { Observable, race, throwError } from "rxjs";
 import {CentipodError, CentipodErrorCode} from './error';
 import semver from 'semver';
-import { Readable } from "stream";
-import { ServiceStatus, TranspilingStatus } from "../../../types";
-import { catchError, first, mergeAll, finalize, takeUntil } from "rxjs/operators";
+import { catchError, finalize } from "rxjs/operators";
 import Timer = NodeJS.Timer;
 import debug from 'debug';
 import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
@@ -150,22 +148,22 @@ export class Workspace {
     return false;
   }
 
-  private async _checkRevision(rev: string): Promise<void> {
+  private static async _checkRevision(rev: string): Promise<void> {
     const isValid = await git.revisionExists(rev);
     if (!isValid) {
       throw new CentipodError(CentipodErrorCode.BAD_REVISION, `Bad revision: ${rev}`);
     }
   }
 
-  private async _checkRevisions(rev1: string, rev2?: string): Promise<void> {
-    await this._checkRevision(rev1);
+  private static async _checkRevisions(rev1: string, rev2?: string): Promise<void> {
+    await Workspace._checkRevision(rev1);
     if (rev2) {
-      await this._checkRevision(rev2);
+      await Workspace._checkRevision(rev2);
     }
   }
 
   async isAffected(rev1: string, rev2?: string, patterns: string[] = ['**'], topological = true): Promise<boolean> {
-    await this._checkRevisions(rev1, rev2);
+    await Workspace._checkRevisions(rev1, rev2);
     if (!topological) {
       return await this._testAffected(rev1, rev2, patterns);
     }
@@ -178,7 +176,7 @@ export class Workspace {
 
   private async _handleDaemon<T = string>(
     daemonConfig: ILogsCondition | ILogsCondition[],
-    cmdProcess: ExecaChildProcess<string>,
+    cmdProcess: ExecaChildProcess,
     startedAt: number,
   ): Promise<IDaemonCommandResult> {
     const logsConditions = Array.isArray(daemonConfig) ? daemonConfig : [daemonConfig];
@@ -258,7 +256,7 @@ export class Workspace {
 
   private _processes = new Map<string, Map<string, ExecaChildProcess>>();
 
-  killAll(target: string) {
+  killAll() {
     this._processes.forEach((cmdProcesses) => cmdProcesses.forEach((cp) => cp.kill()));
   }
 

@@ -35,6 +35,7 @@ export class TargetsResolver {
   }
 
   private async _recursivelyResolveTargets(cmd: string, options: ITopologicalRunOptions): Promise<OrderedTargets> {
+    console.debug('Recursively resolving targets');
     const targets = await this._findTargets(Array.from(this._project.getTopologicallySortedWorkspaces(options.to)), cmd, options);
     // Find targets we will not run command on as it is either unaffected or it has not the command
     const inactiveTargets = targets.filter((t) => !t.hasCommand || !t.affected);
@@ -47,6 +48,8 @@ export class TargetsResolver {
     // The recursion will determine which targets can be processed in parallel, depending on their position in the graph
     // At each recursion step, we find which targets can be processed safely and remove them
     const processed = new Set<string>();
+    console.debug('Inactive targets', inactiveTargetsNames);
+    console.debug('Ordering targets');
     const orderTargets = (targets: Set<IResolvedTarget>): void => {
       // Exit condition : When the set is empty, every target is processed
       if (!targets.size) {
@@ -54,9 +57,11 @@ export class TargetsResolver {
       }
       const step: IResolvedTarget[] = [];
       for (const target of targets) {
+        console.debug('Analyzing target', target.workspace.name);
         // A target can be processed if it is a leaf or all its dependencies has already processed or ignored
         const isLeaf = this._project.leaves.has(target.workspace.name);
         const hasEveryDependenciesProcessed = Array.from(target.workspace.descendants.keys()).every((dep) => inactiveTargetsNames.has(dep) || processed.has(dep));
+        console.debug({ isLeaf, hasEveryDependenciesProcessed });
         if (isLeaf || hasEveryDependenciesProcessed) {
           step.push(target);
         }
@@ -72,6 +77,7 @@ export class TargetsResolver {
     // We initialize the recursion on active targets
     const activeTargets = new Set(targets.filter((t) => !inactiveTargetsNames.has(t.workspace.name)));
     orderTargets(activeTargets);
+    console.debug('Ordered Targets', orderedTargets.map((step) => step.map((t) => t.workspace.name)));
     return orderedTargets;
   }
 }

@@ -1,4 +1,4 @@
-import path_1, {dirname, join} from "path";
+import {dirname, join} from "path";
 import {promises as fs} from "fs";
 
 export interface ILogsCondition {

@@ -24,7 +24,7 @@ export interface ICommonRunOptions{
 
 export interface ITopologicalRunOptions extends ICommonRunOptions {
   mode: 'topological';
-  to?: Workspace;
+  to?: Workspace[];
 }
 
 export interface IParallelRunOptions extends ICommonRunOptions {
@@ -212,7 +212,7 @@ export class Runner {
                 console.log('Kill impacted processes', workspace.name);
                 obs.next({ type: RunCommandEventEnum.NODE_INTERRUPTED, workspace });
                 killed.add(workspace);
-                workspace.killAll(cmd);
+                workspace.killAll();
               }
               if (allProcessed && letFinishStepAndAbort) {
                 console.debug('All node processed and interruption received, rescheduling immediately');

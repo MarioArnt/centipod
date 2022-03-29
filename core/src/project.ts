@@ -8,7 +8,7 @@ import { ReleaseType } from 'semver';
 import { CentipodError, CentipodErrorCode } from './error';
 import { Observable } from 'rxjs';
 import { RunCommandEvent } from './process';
-import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
+import { AbstractLogsHandler } from "./logs-handler";
 
 export class Project extends Workspace {
   // Attributes
@@ -65,21 +65,27 @@ export class Project extends Workspace {
     return roots;
   }
 
-  getTopologicallySortedWorkspaces(to?: Workspace): Workspace[] {
+  getTopologicallySortedWorkspaces(to?: Workspace[]): Workspace[] {
+    console.debug('Sorting workspaces topologically');
     const sortedWorkspaces: Set<Workspace> = new Set<Workspace>();
-    const visitWorkspace = (workspace: Workspace): void => {
+    const visitWorkspace = (workspace: Workspace, depth = 0): void => {
+      console.debug('-'.repeat(depth), 'Visiting', workspace.name)
       for (const dep of workspace.dependencies()) {
-        visitWorkspace(dep);
+        visitWorkspace(dep, depth + 1);
       }
       sortedWorkspaces.add(workspace);
     };
     if (to) {
-      visitWorkspace(to);
+      console.debug('Explicit targets', to.map((w) => w.name));
+      for (const target of to) {
+        visitWorkspace(target);
+      }
     } else {
       for (const root of this.roots.values()) {
         visitWorkspace(root);
       }
     }
+    console.debug('Workspaces sorted topologically', [...sortedWorkspaces].map((w) => w.name));
     return [...sortedWorkspaces];
   }
 
