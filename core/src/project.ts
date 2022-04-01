@@ -9,6 +9,7 @@ import { CentipodError, CentipodErrorCode } from './error';
 import { Observable } from 'rxjs';
 import { RunCommandEvent } from './process';
 import { AbstractLogsHandler } from "./logs-handler";
+import { IAbstractLogger } from "./logger";
 
 export class Project extends Workspace {
   // Attributes
@@ -18,14 +19,14 @@ export class Project extends Workspace {
   get workspaces(): Map<string, Workspace> { return this._workspaces }
 
   // Statics
-  static async loadProject(root: string): Promise<Project> {
+  static async loadProject(root: string, logger?: IAbstractLogger): Promise<Project> {
     const prj = new Project(await this.loadPackage(root), root, await this.loadConfig(root));
-    await prj.loadWorkspaces();
+    await prj.loadWorkspaces(logger);
     return prj;
   }
 
   // Methods
-  async loadWorkspaces(): Promise<void> {
+  async loadWorkspaces(logger?: IAbstractLogger): Promise<void> {
     // Load workspaces
     if (this.pkg.workspaces && this.pkg.workspaces.length > 0) {
       const patterns = this.pkg.workspaces.map(wks => glob(join(this.root, wks, 'package.json'))).reduce((acc, val) => acc = acc.concat(val), []);
@@ -33,7 +34,7 @@ export class Project extends Workspace {
         root = root.replace(/[\\/]package\.json$/, '');
         try {
           // Store it
-          const wks = await Workspace.loadWorkspace(root, this);
+          const wks = await Workspace.loadWorkspace(root, this, logger);
           this._workspaces.set(wks.name, wks);
 
         } catch (error) {
@@ -66,17 +67,17 @@ export class Project extends Workspace {
   }
 
   getTopologicallySortedWorkspaces(to?: Workspace[]): Workspace[] {
-    console.debug('Sorting workspaces topologically');
+    //console.debug('Sorting workspaces topologically');
     const sortedWorkspaces: Set<Workspace> = new Set<Workspace>();
     const visitWorkspace = (workspace: Workspace, depth = 0): void => {
-      console.debug('-'.repeat(depth), 'Visiting', workspace.name)
+      //console.debug('-'.repeat(depth), 'Visiting', workspace.name)
       for (const dep of workspace.dependencies()) {
         visitWorkspace(dep, depth + 1);
       }
       sortedWorkspaces.add(workspace);
     };
     if (to) {
-      console.debug('Explicit targets', to.map((w) => w.name));
+      //console.debug('Explicit targets', to.map((w) => w.name));
       for (const target of to) {
         visitWorkspace(target);
       }
@@ -85,7 +86,7 @@ export class Project extends Workspace {
         visitWorkspace(root);
       }
     }
-    console.debug('Workspaces sorted topologically', [...sortedWorkspaces].map((w) => w.name));
+    //console.debug('Workspaces sorted topologically', [...sortedWorkspaces].map((w) => w.name));
     return [...sortedWorkspaces];
   }
 

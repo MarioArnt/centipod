@@ -5,6 +5,21 @@ const print = (lvl: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]): vo
   }
 }
 
+type IAbstractLoggerFunction =  (...args: unknown[]) => void;
+
+export interface IAbstractLogger {
+  log: (scope?: string) => IAbstractLoggerFunctions;
+}
+
+export interface IAbstractLoggerFunctions {
+  silly: IAbstractLoggerFunction;
+  debug: IAbstractLoggerFunction;
+  info: IAbstractLoggerFunction;
+  warn: IAbstractLoggerFunction;
+  error: IAbstractLoggerFunction;
+  logger: IAbstractLogger;
+}
+
 export const logger = {
   debug: (...args: unknown[]): void => print('debug', args),
   info: (...args: unknown[]): void => print('info', args),

@@ -4,8 +4,10 @@ import { join } from 'path';
 import { fromFile } from 'hasha';
 import { Cache } from "./cache";
 import { CentipodError, CentipodErrorCode } from './error';
+import { IAbstractLoggerFunctions } from "./logger";
 
 export class Checksum {
+  private _logger: IAbstractLoggerFunctions | undefined;
   constructor (
     private readonly _cache: Cache,
   ) {}

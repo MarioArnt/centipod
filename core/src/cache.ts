@@ -8,14 +8,14 @@ import { isEqual } from 'lodash';
 import { ICommandResult } from './process';
 import { CentipodError, CentipodErrorCode } from './error';
 import { IConfigEntry } from './config';
-import {logger} from "./logger";
+import { IAbstractLoggerFunctions, logger } from "./logger";
 
 export interface ICacheOptions {
   dir?: string;
 }
 
 export class Cache {
-
+  private _logger: IAbstractLoggerFunctions | undefined;
   private readonly _cacheFolder: string;
 
   constructor (

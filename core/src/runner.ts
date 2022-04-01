@@ -13,6 +13,7 @@ import { Workspace } from "./workspace";
 import { OrderedTargets, TargetsResolver } from "./targets";
 import { ICacheOptions } from "./cache";
 import { Watcher } from "./watcher";
+import { IAbstractLogger, IAbstractLoggerFunctions } from "./logger";
 
 export interface ICommonRunOptions{
   mode: 'parallel' | 'topological';
@@ -57,12 +58,16 @@ const isStepCompletedEvent = (evt: RunCommandEvent | StepCompletedEvent): evt is
 
 export class Runner {
   private _watchers = new Map<string, { watcher: Watcher, abort: Subject<void>}>();
+  private _logger: IAbstractLoggerFunctions | undefined;
 
   constructor(
     private readonly _project: Project,
     private readonly _concurrency: number = 4,
     private readonly _cacheOptions: ICacheOptions = {},
-  ) {}
+    logger?: IAbstractLogger,
+  ) {
+    this._logger = logger?.log('@centipod/core/runner');
+  }
 
   /**/
 
@@ -73,21 +78,21 @@ export class Runner {
     args: string[] | string = [],
     env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent | StepCompletedEvent> {
-    console.debug('Schedule tasks');
+    this._logger?.debug('Schedule tasks', { cmd });
     const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env));
     return from(steps$).pipe(concatAll());
   }
 
   private _rescheduleTasks(cmd: string, currentStep: IResolvedTarget[], impactedTargets: Set<Workspace>, targets: OrderedTargets, options: RunOptions, args: string[] | string, env: { [p: string]: string }) {
-    console.debug('Rescheduling from step', targets.indexOf(currentStep))
+    this._logger?.debug('Rescheduling from step', targets.indexOf(currentStep))
     const subsequentSteps$ = targets
       .filter((step) => {
         return targets.indexOf(step) >= targets.indexOf(currentStep);
       })
       .map((step) => {
-        console.debug('Scheduling step', targets.indexOf(step));
+        this._logger?.debug('Scheduling step', targets.indexOf(step));
         if (targets.indexOf(step) === targets.indexOf(currentStep)) {
-          console.debug('Ignoring non-impacted targets, impacted targets are', Array.from(impactedTargets).map(w => w.name));
+          this._logger?.debug('Ignoring non-impacted targets, impacted targets are', Array.from(impactedTargets).map(w => w.name));
           return this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env, impactedTargets);
         }
         return this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env);
@@ -96,33 +101,37 @@ export class Runner {
   }
 
   unwatch(cmd: string) {
-    console.debug('Un-watching command', cmd);
+    this._logger?.debug('Un-watching command', cmd);
     this._watchers.get(cmd)?.watcher.unwatch();
     this._watchers.get(cmd)?.abort.next();
   }
 
   runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}, watch = false, debounce = 1000): Observable<RunCommandEvent> {
     return new Observable((obs) => {
-      const targets = new TargetsResolver(this._project);
+      this._logger?.info('Resolving for command', cmd);
+      const targets = new TargetsResolver(this._project, this._logger?.logger);
       targets.resolve(cmd, options).then((targets) => {
         // TODO: Validate configurations for each targets
+        this._logger?.info('Targets resolved for command', cmd, targets.map(s => s.map(t => t.workspace.name)));
         obs.next({ type: RunCommandEventEnum.TARGETS_RESOLVED, targets: targets.flat() });
         if (!targets.length) {
+          this._logger?.info('No eligible targets found for command', cmd)
           return obs.complete();
         }
         if (!watch) {
           const tasks$ = this._scheduleTasks(cmd, targets, options, args, env);
-          tasks$.subscribe(
-            (evt) => {
+          this._logger?.info('Tasks scheduled for command', cmd)
+          tasks$.subscribe({
+            next: (evt) => {
               if (!isStepCompletedEvent(evt)) {
                 obs.next(evt);
               }
             },
-            (err) => obs.error(err),
-            () => obs.complete(),
-          )
+            error: (err) => obs.error(err),
+            complete: () => obs.complete()
+          })
         } else {
-          console.debug('Running target', cmd, 'in watch mode');
+          this._logger?.info('Running target', cmd, 'in watch mode');
           let currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
           const watcher = new Watcher(targets, cmd, debounce);
           const shouldAbort$ = new Subject<void>();
@@ -130,7 +139,7 @@ export class Runner {
           const shouldKill$ = new Subject<Workspace | Step>();
           const sourcesChange$ = watcher.watch();
           this._watchers.set(cmd, { watcher, abort: shouldAbort$ });
-          console.debug('Watching sources');
+          this._logger?.debug('Watching sources');
           let currentStep: IResolvedTarget[] | undefined;
           const isBeforeCurrentStep = (impactedStep: IResolvedTarget[] | undefined) => {
             if(!currentStep || !impactedStep) {
@@ -159,10 +168,10 @@ export class Runner {
             });
             impactedTargets.clear();
             killed.clear();
-            console.debug('New current tasks execution');
-            console.debug('Reset impacted targets');
-            console.debug('Reset killed targets');
-            console.debug('Removing impacted targets from processed ', {
+            this._logger?.debug('New current tasks execution');
+            this._logger?.debug('Reset impacted targets');
+            this._logger?.debug('Reset killed targets');
+            this._logger?.debug('Removing impacted targets from processed ', {
               processed: Array.from(workspaceProcessed).map((w) => w.name)
             });
             currentTasks$.pipe(takeUntil(shouldAbort$)).subscribe((evt) => {
@@ -170,25 +179,25 @@ export class Runner {
                 case RunCommandEventEnum.NODE_STARTED:
                   currentStep = targets.find((step) => step.some((target) => target.workspace.name === evt.workspace.name));
                   if (currentStep) {
-                    console.debug('Current step updated', targets.indexOf(currentStep));
+                    this._logger?.debug('Current step updated', targets.indexOf(currentStep));
                   }
                   _workspaceWithRunningProcesses.add(evt.workspace);
-                  console.debug('Setting node as processing', evt.workspace.name);
-                  console.debug({ processing: Array.from(_workspaceWithRunningProcesses).map((w) => w.name)});
+                  this._logger?.debug('Setting node as processing', evt.workspace.name);
+                  this._logger?.debug({ processing: Array.from(_workspaceWithRunningProcesses).map((w) => w.name)});
                   break;
                 case RunCommandEventEnum.NODE_PROCESSED:
                 case RunCommandEventEnum.NODE_ERRORED:
                   _workspaceWithRunningProcesses.delete(evt.workspace);
                   workspaceProcessed.add(evt.workspace);
-                  console.debug('Setting node as processed', evt.workspace.name);
-                  console.debug({
+                  this._logger?.debug('Setting node as processed', evt.workspace.name);
+                  this._logger?.debug({
                     processing: Array.from(_workspaceWithRunningProcesses).map((w) => w.name),
                     processed: Array.from(workspaceProcessed).map((w) => w.name)
                   });
                   break;
               }
               if (evt.type === RunCommandEventEnum.NODE_PROCESSED && killed.has(evt.workspace)) {
-                console.debug('Node killed not forwarding processed event', evt.workspace.name);
+                this._logger?.debug('Node killed not forwarding processed event', evt.workspace.name);
               } else if (!isStepCompletedEvent(evt)) {
                 obs.next(evt);
               } else if (letFinishStepAndAbort) {
@@ -199,7 +208,7 @@ export class Runner {
             }, (err) => {
               obs.error(err);
             }, () => {
-              console.debug('Current tasks executed watching for changes');
+              this._logger?.debug('Current tasks executed watching for changes');
               allProcessed = true;
             });
           }
@@ -207,48 +216,48 @@ export class Runner {
             if (!currentStep) {
               throw Error('Assertion failed: current step not resolved in interruption !')
             }
-            console.debug('Interruption has been received in previous step, re-scheduling');
+            this._logger?.debug('Interruption has been received in previous step, re-scheduling');
             currentTasks$ = this._rescheduleTasks(cmd, fromStep, impactedTargets, targets, options, args, env);
-            console.debug('Current tasks updated');
+            this._logger?.debug('Current tasks updated');
             executeCurrentTasks();
           })
           shouldKill$.subscribe((workspaceOrStep) => {
             const workspaces = Array.isArray(workspaceOrStep) ? workspaceOrStep.map((t) => t.workspace) : [workspaceOrStep];
             for (const workspace of workspaces) {
-              console.log('Kill impacted processes if running', workspace.name);
+              this._logger?.info('Kill impacted processes if running', workspace.name);
               if (_workspaceWithRunningProcesses.has(workspace)) {
-                console.log('Kill impacted processes', workspace.name);
+                this._logger?.info('Kill impacted processes', workspace.name);
                 obs.next({ type: RunCommandEventEnum.NODE_INTERRUPTED, workspace });
                 killed.add(workspace);
                 workspace.kill(cmd);
               }
               if (allProcessed && letFinishStepAndAbort) {
-                console.debug('All node processed and interruption received, rescheduling immediately');
+                this._logger?.debug('All node processed and interruption received, rescheduling immediately');
                 shouldReschedule$.next(currentStep!);
               }
             }
           });
           sourcesChange$.subscribe((changes) => {
             for (const change of changes) {
-              console.debug('Source changed', change.target.workspace.name);
+              this._logger?.debug('Source changed', change.target.workspace.name);
               const impactedTarget = change.target;
               obs.next({ type: RunCommandEventEnum.SOURCES_CHANGED, ...change })
-              console.debug('Impacted target', change.target.workspace.name);
+              this._logger?.debug('Impacted target', change.target.workspace.name);
               const impactedStep = targets.find((step) => step.some((t) => t.workspace.name === impactedTarget.workspace.name));
               if (impactedStep) {
-                console.debug('Impacted step updated', targets.indexOf(impactedStep));
+                this._logger?.debug('Impacted step updated', targets.indexOf(impactedStep));
               }
               const isProcessed = workspaceProcessed.has(change.target.workspace);
               const isProcessing = _workspaceWithRunningProcesses.has(change.target.workspace);
               const hasNotStartedYet = !(isProcessed || isProcessing);
-              console.debug({ isBefore: isBeforeCurrentStep(impactedStep), isEqual: isEqualsCurrentStep(impactedStep), hasStarted: !hasNotStartedYet, isProcessed, isProcessing })
+              this._logger?.debug({ isBefore: isBeforeCurrentStep(impactedStep), isEqual: isEqualsCurrentStep(impactedStep), hasStarted: !hasNotStartedYet, isProcessed, isProcessing })
               if (isEqualsCurrentStep(impactedStep) && !hasNotStartedYet) {
                 impactedTargets.add(change.target.workspace);
-                console.debug('Impacted step is same than current step. Should abort after current step execution');
+                this._logger?.debug('Impacted step is same than current step. Should abort after current step execution');
                 letFinishStepAndAbort = true;
                 shouldKill$.next(change.target.workspace);
               } else if (isBeforeCurrentStep(impactedStep)) {
-                console.debug('Impacted step before current step. Should abort immediately');
+                this._logger?.debug('Impacted step before current step. Should abort immediately');
                 shouldAbort$.next();
                 impactedTargets.add(change.target.workspace);
                 letFinishStepAndAbort = false;
@@ -275,7 +284,7 @@ export class Runner {
     only?: Set<Workspace>,
   ): Observable<RunCommandEvent | StepCompletedEvent> {
     const executions = new Set<CaughtProcessExecution>();
-    console.log('Running step', targets.indexOf(step));
+    this._logger?.info('Preparing step', targets.indexOf(step), { cmd });
     const tasks$ = step
       .filter((w) => !only || only.has(w.workspace))
       .map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
@@ -375,7 +384,6 @@ export class Runner {
     env: {[key: string]: string} = {},
     cacheOptions: ICacheOptions = {},
   ) : Observable<CaughtProcessExecution>{
-    console.debug('RUN', target.workspace.name);
     const command$ = target.workspace.run(cmd, force, args, stdio, env, cacheOptions);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),

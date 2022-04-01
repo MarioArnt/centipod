@@ -6,6 +6,7 @@ import { Observable } from "rxjs";
 import { join } from 'path';
 import { CentipodError, CentipodErrorCode } from "./error";
 import { Project } from "./project";
+import { IAbstractLoggerFunctions } from "./logger";
 
 export interface IPublishAction {
   workspace: Workspace;
@@ -70,6 +71,8 @@ export class PublishActions {
 }
 
 export class Publish {
+  private _logger: IAbstractLoggerFunctions | undefined;
+
   constructor(
     private readonly _project: Project,
   ) {}
