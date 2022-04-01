@@ -1,17 +1,27 @@
-import { isNodeEvent, isProcessError, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@centipod/core";
+import {
+  isNodeEvent,
+  isProcessError,
+  isNodeErroredEvent,
+  isNodeSucceededEvent,
+  isTargetResolvedEvent,
+  Project,
+  resolveProjectRoot,
+  Workspace,
+  isDaemon
+} from "@centipod/core";
 import chalk from 'chalk';
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
 
 export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, watch?: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
-  // TODO: Validate options (conflict between parallel/topolical)
-  const project =  await Project.loadProject(resloveProjectRoot());
+  // TODO: Validate options (conflict between parallel/topological)
+  const project =  await Project.loadProject(resolveProjectRoot());
   const to = options.to ? resolveWorkspace(project, options.to) : undefined;
   logger.lf();
   logger.info(logger.centipod, `Running command ${chalk.white.bold(cmd)}`, options.to ? `on project ${options.to}` : '');
   logger.seperator();
   logger.info('Topological:', chalk.white(!options.parallel));
-  logger.info('Parallel:', chalk.white(!!options.parallel));
+  logger.info('Parallel:', chalk.white(options.parallel));
   logger.info('Use caches:', chalk.white(!options.force));
   const affected = options.affected?.split('..');
   let revisions: { rev1: string, rev2: string } | undefined;
@@ -44,11 +54,11 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
   const runOptions =  options.parallel ? {
     mode: 'parallel' as const, force: options.force, affected: revisions, workspaces: to ? [to] : undefined,
   } : {
-    mode: 'topological' as const, force: options.force, affected: revisions, to,
+    mode: 'topological' as const, force: options.force, affected: revisions, to: to ? [to] : undefined,
   };
 
-  project.runCommand(cmd, runOptions).subscribe(
-      (event) => {
+  project.runCommand(cmd, runOptions).subscribe({
+      next: (event) => {
         if (isTargetResolvedEvent(event)) {
           if (!event.targets.some((target) => target.hasCommand)) {
             logger.lf();
@@ -64,13 +74,17 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
           logger.lf();
           logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(event.workspace.name)} ${logger.took(event.result.overall )} ${event.result.fromCache ? logger.fromCache : ''}`);
           for (const command of event.result.commands) {
-            logger.lf();
-            logger.info(chalk.cyan('>'), command.command);
-            logger.lf();
-            if (command.all) {
-              logger.log(command.all);
+            if (!isDaemon(command)) {
+              logger.lf();
+              logger.info(chalk.cyan('>'), command.command);
+              logger.lf();
+              if (command.all) {
+                logger.log(command.all);
+              } else {
+                logger.info('Process exited with status', command.exitCode);
+              }
             } else {
-              logger.info('Process exited with status', command.exitCode);
+              logger.info('Demon started');
             }
           }
           logger.seperator();
@@ -81,12 +95,12 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
           failures.add(event.workspace);
         }
     },
-    (err) => {
+    error: (err) => {
       printError(err);
       logger.error(logger.centipod, logger.failed, 'Command failed');
       process.exit(1)
     },
-    () => {
+    complete: () => {
       logger.lf();
       const hasFailed = failures.size > 0;
       const status = hasFailed ? logger.failed : logger.success;
@@ -98,5 +112,5 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
       }
       process.exit(hasFailed ? 1 : 0);
     },
-  );
+  });
 }

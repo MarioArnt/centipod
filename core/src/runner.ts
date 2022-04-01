@@ -56,6 +56,7 @@ const isStepCompletedEvent = (evt: RunCommandEvent | StepCompletedEvent): evt is
 }
 
 export class Runner {
+  private _watchers = new Map<string, { watcher: Watcher, abort: Subject<void>}>();
 
   constructor(
     private readonly _project: Project,
@@ -94,6 +95,12 @@ export class Runner {
     return from(subsequentSteps$).pipe(concatAll());
   }
 
+  unwatch(cmd: string) {
+    console.debug('Un-watching command', cmd);
+    this._watchers.get(cmd)?.watcher.unwatch();
+    this._watchers.get(cmd)?.abort.next();
+  }
+
   runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}, watch = false, debounce = 1000): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       const targets = new TargetsResolver(this._project);
@@ -122,6 +129,7 @@ export class Runner {
           const shouldReschedule$ = new Subject<Step>();
           const shouldKill$ = new Subject<Workspace | Step>();
           const sourcesChange$ = watcher.watch();
+          this._watchers.set(cmd, { watcher, abort: shouldAbort$ });
           console.debug('Watching sources');
           let currentStep: IResolvedTarget[] | undefined;
           const isBeforeCurrentStep = (impactedStep: IResolvedTarget[] | undefined) => {
@@ -212,7 +220,7 @@ export class Runner {
                 console.log('Kill impacted processes', workspace.name);
                 obs.next({ type: RunCommandEventEnum.NODE_INTERRUPTED, workspace });
                 killed.add(workspace);
-                workspace.killAll();
+                workspace.kill(cmd);
               }
               if (allProcessed && letFinishStepAndAbort) {
                 console.debug('All node processed and interruption received, rescheduling immediately');

@@ -1,4 +1,4 @@
-import { Project, resloveProjectRoot } from "@centipod/core";
+import { Project, resolveProjectRoot } from "@centipod/core";
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
 import chalk from 'chalk';
@@ -8,7 +8,7 @@ import { printEvent } from "../utils/print-publish-events";
 import semver from 'semver';
 
 export const publish = async (workspaceName: string, bump: semver.ReleaseType, identifier: string | undefined, options: { yes: boolean, access: string, dry: boolean }): Promise<void> => {
-  const project =  await Project.loadProject(resloveProjectRoot());
+  const project =  await Project.loadProject(resolveProjectRoot());
   const workspace = resolveWorkspace(project, workspaceName);
   logger.lf();
   logger.info(logger.centipod, `Publishing ${chalk.white.bold(workspace.name)}`);
@@ -34,17 +34,17 @@ export const publish = async (workspaceName: string, bump: semver.ReleaseType, i
     workspace.publish({
       access: options.access || 'public',
       dry: options.dry,
-    }).subscribe(
-      (evt) => printEvent(evt),
-      (err) => {
+    }).subscribe({
+      next: (evt) => printEvent(evt),
+      error: (err) => {
         logger.error(err);
         process.exit(1);
       },
-      () => {
+      complete: () => {
         logger.info(logger.centipod, logger.success, chalk.green.bold(`Successfully published package ${workspaceName} and its dependencies`));
         process.exit(0);
       },
-    );
+    });
   }
   if (options.yes) {
     doPublish();

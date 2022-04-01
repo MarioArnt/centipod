@@ -23,6 +23,8 @@ import { catchError, finalize } from "rxjs/operators";
 import Timer = NodeJS.Timer;
 import debug from 'debug';
 import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
+import processTree from "ps-tree";
+import { isPortAvailable } from "./port-available";
 
 const TWO_MINUTES = 2 * 60 * 1000;
 const DEFAULT_DAEMON_TIMEOUT = TWO_MINUTES;
@@ -256,8 +258,59 @@ export class Workspace {
 
   private _processes = new Map<string, Map<string, ExecaChildProcess>>();
 
-  killAll() {
-    this._processes.forEach((cmdProcesses) => cmdProcesses.forEach((cp) => cp.kill()));
+  get processes() {
+    return this._processes;
+  }
+
+  private static _killProcessTree(childProcess: ExecaChildProcess, signal: 'SIGTERM' | 'SIGKILL' = 'SIGTERM'): void {
+    if (childProcess.pid) {
+      processTree(childProcess.pid, (err, children) => {
+        if (err) {
+          childProcess.kill(signal);
+        }
+        children.forEach((child) => process.kill(Number(child.PID), signal));
+      });
+    }
+  }
+
+  private static _killProcess(childProcess: ExecaChildProcess, releasePorts: number[] = [], timeout = 500) {
+    return new Promise<void>((resolve) => {
+      const watchKilled = (): void => {
+        if (childProcess) {
+          let killed = false;
+          childProcess.on('close', (code) => {
+            // On close, we are sure that every process in process tree has exited, so we can complete observable
+            // This is the most common scenario, where sls offline gracefully shutdown underlying hapi server and
+            // close properly with status 0
+            killed = true;
+            return resolve();
+          });
+          // This is a security to make child process release given ports, we give 500ms to process to gracefully
+          // exit. Other wise we send SIGKILL to the whole process tree to free the port (#Rampage)
+          if (releasePorts) {
+            setTimeout(async () => {
+              const areAvailable = await Promise.all(releasePorts.map((port) => isPortAvailable(port)));
+              if (areAvailable.some((a) => !a) && !killed) {
+                this._killProcessTree(childProcess, 'SIGKILL');
+              }
+              return resolve();
+            }, timeout);
+          }
+        }
+      };
+      if (childProcess) {
+        watchKilled();
+        this._killProcessTree(childProcess);
+      }
+    })
+
+  }
+
+  async kill(cmd: string, releasePorts: number[] = [], timeout = 500): Promise<void> {
+    const processes = this._processes.get(cmd);
+    if (processes) {
+      await Promise.all([...processes.values()].map((cp) => Workspace._killProcess(cp, releasePorts, timeout)));
+    }
   }
 
   private async _runCommand(
