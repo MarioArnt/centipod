@@ -14,13 +14,13 @@ export abstract class AbstractLogsHandler<T> implements ILogsHandler {
   protected _logs: Map<string, T> = new Map();
   abstract name: string;
 
-  constructor(private readonly _workspace: Workspace) {}
+  constructor(protected readonly _workspace: Workspace) {}
   abstract append(target: string, chunk: string | Buffer): void;
   abstract close(target: string): void;
   abstract open(target: string): void;
 
   commandStarted(target: string, cmd: string) {
-    this.append(target,`Process $(cmd} started at ${new Date().toISOString()}`)
+    this.append(target,`Process ${cmd} started at ${new Date().toISOString()}`)
   }
 
   commandEnded(target: string, result: ExecaReturnValue | ExecaError): void {
@@ -30,7 +30,7 @@ export abstract class AbstractLogsHandler<T> implements ILogsHandler {
   get(target: string): T | undefined { return this._logs.get(target) }
 
   protected _open(target: string, initialValue: T) {
-    if (this._logs.has(target)) {
+    if (!this._logs.has(target)) {
       this._logs.set(target, initialValue);
     }
   }
@@ -61,6 +61,8 @@ export abstract class LogFilesHandler extends AbstractLogsHandler<WriteStream> {
 
   append(target: string, chunk: string | Buffer): void {
     this.open(target);
+    console.debug('Streaming', chunk.length, 'bytes to', this.get(target)?.path);
+    console.debug(chunk.toString());
     this.get(target)?.write(chunk.toString());
   }
 

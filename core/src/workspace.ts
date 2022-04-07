@@ -52,6 +52,7 @@ export class Workspace {
   }
 
   static async loadWorkspace(root: string, project?: Project, logger?: IAbstractLogger): Promise<Workspace> {
+    logger?.log('@centipod/core/workspace').debug('Loading workspace', root);
     return new Workspace(await this.loadPackage(root), root, await this.loadConfig(root), project, logger);
   }
 
@@ -192,6 +193,8 @@ export class Workspace {
     const crashed$ = new Observable<IDaemonCommandResult>((obs) => {
       cmdProcess.catch((crashed) => {
         if (!killed) {
+          this._handleLogs('append', 'Daemon crashed');
+          this._handleLogs('append', crashed.message);
           this._logger?.warn('Daemon crashed', { target: this.name });
           obs.error(crashed);
         }
@@ -459,6 +462,7 @@ export class Workspace {
     env: {[key: string]: string} = {},
     options: ICacheOptions = {},
   ): Observable<IProcessResult> {
+    this._logger?.info('Preparing command', { cmd: target, workspace: this.name });
     return new Observable<IProcessResult>((obs) => {
       this._logger?.info('Running cmd', { cmd: target, target: this.name });
       this._run(target, force, args, env, options, stdio)
@@ -467,7 +471,7 @@ export class Workspace {
           obs.next(result)
         })
         .catch((error) => {
-          this._logger?.info('Errored', { cmd: target, target: this.name }, error);
+          this._logger?.warn('Errored', { cmd: target, target: this.name }, error);
           obs.error(error);
         }).finally(() => {
           this._logger?.debug('Completed', { cmd: target, target: this.name });

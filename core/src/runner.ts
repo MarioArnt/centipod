@@ -106,7 +106,7 @@ export class Runner {
     this._watchers.get(cmd)?.abort.next();
   }
 
-  runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}, watch = false, debounce = 1000): Observable<RunCommandEvent> {
+  runCommand(cmd: string, options: RunOptions, args: string[] | string = [], env: {[key: string]: string} = {}, debounce = 1000): Observable<RunCommandEvent> {
     return new Observable((obs) => {
       this._logger?.info('Resolving for command', cmd);
       const targets = new TargetsResolver(this._project, this._logger?.logger);
@@ -118,7 +118,7 @@ export class Runner {
           this._logger?.info('No eligible targets found for command', cmd)
           return obs.complete();
         }
-        if (!watch) {
+        if (!options.watch) {
           const tasks$ = this._scheduleTasks(cmd, targets, options, args, env);
           this._logger?.info('Tasks scheduled for command', cmd)
           tasks$.subscribe({
@@ -133,7 +133,7 @@ export class Runner {
         } else {
           this._logger?.info('Running target', cmd, 'in watch mode');
           let currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
-          const watcher = new Watcher(targets, cmd, debounce);
+          const watcher = new Watcher(targets, cmd, debounce, this._logger?.logger);
           const shouldAbort$ = new Subject<void>();
           const shouldReschedule$ = new Subject<Step>();
           const shouldKill$ = new Subject<Workspace | Step>();
@@ -287,24 +287,29 @@ export class Runner {
     this._logger?.info('Preparing step', targets.indexOf(step), { cmd });
     const tasks$ = step
       .filter((w) => !only || only.has(w.workspace))
-      .map((w) => Runner._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
+      .map((w) => this._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),
     );
     return new Observable<RunCommandEvent | StepCompletedEvent>((obs) => {
+      this._logger?.info('Running step', targets.indexOf(step), { cmd, nodes: step.map((t) => t.workspace.name) });
       const resolveInvalidations$ = (): Observable<RunCommandEvent> => {
         // When execution step is completed or errored, perform required cache invalidations
         // Invalidate cache of every errored nodes
+        this._logger?.info('Resolving invalidations');
         const invalidations$: Array<Observable<RunCommandEvent>> = [];
         let hasAtLeastOneError = false;
         let cachedInvalidated = false;
         let current: IResolvedTarget | null = null;
         for (const execution of executions) {
           current = execution.target;
+          this._logger?.info('Execution status', { cmd, workspace: execution.target.workspace.name, status: execution.status });
           if (isFailedExecution(execution)) {
+            this._logger?.info('Execution failed, invalidating cache', { cmd, workspace: execution.target.workspace.name })
             hasAtLeastOneError = true;
             invalidations$.push(Runner._invalidateCache(execution.target.workspace, cmd));
           } else if (!execution.result.fromCache) {
+            this._logger?.info('Cache has been invalidated during execution', { cmd, workspace: execution.target.workspace.name });
             cachedInvalidated = true;
           }
         }
@@ -315,43 +320,50 @@ export class Runner {
         }
         return from(invalidations$).pipe(concatAll())
       }
-      step$.subscribe(
-        (evt) => obs.next(evt),
-        (err) => {
+      step$.subscribe({
+        next: (evt) => {
+          this._logger?.info('Forwarding run command event', { cmd, type: evt.type, workspace: (evt as any)?.workspace?.name });
+          obs.next(evt);
+        },
+        error: (err) => {
+          this._logger?.info('Error received', { cmd, err });
           if (isRunCommandErroredEvent(err)) {
+            this._logger?.info('Is node errored event', { cmd });
             obs.next(err);
           }
-          resolveInvalidations$().subscribe(
-            (next) => obs.next(next),
-            (error) => {
+          this._logger?.warn('Unexpected error received during step execution', { cmd, err });
+          resolveInvalidations$().subscribe({
+            next: (next) => obs.next(next),
+            error: (error) => {
               if (isRunCommandErroredEvent(error)) {
                 obs.next(error);
               }
               obs.error(error);
             },
-            () => obs.error(err),
-          );
+            complete: () => obs.error(err)
+          });
         },
-        () => {
-          resolveInvalidations$().subscribe(
-            (next) => obs.next(next),
-            (error) => {
+        complete: () => {
+          this._logger?.info('Step execution completed', { cmd, step: targets.indexOf(step) })
+          resolveInvalidations$().subscribe({
+            next: (next) => obs.next(next),
+            error: (error) => {
               if (isRunCommandErroredEvent(error)) {
                 obs.next(error);
               }
               obs.error(error);
             },
-            () => {
-              obs.next({ type: 'STEP_COMPLETED' });
+            complete: () => {
+              obs.next({ type: "STEP_COMPLETED" });
               obs.complete();
-            },
-          );
+            }
+          });
         }
-      )
+      })
     })
   }
 
-  private static _runForWorkspace(
+  private _runForWorkspace(
     executions: Set<CaughtProcessExecution>,
     target: IResolvedTarget,
     cmd: string,
@@ -364,8 +376,8 @@ export class Runner {
   ): Observable<RunCommandEvent> {
     if (target.affected && target.hasCommand) {
       const started$: Observable<RunCommandEvent>  = of({ type: RunCommandEventEnum.NODE_STARTED, workspace: target.workspace });
-      const execute$: Observable<RunCommandEvent> = Runner._executeCommandCatchingErrors(target, cmd, force, args, stdio, env, cacheOptions).pipe(
-        concatMap((result) => Runner._mapToEventsAndInvalidateCacheIfNecessary(executions, result, target, mode)),
+      const execute$: Observable<RunCommandEvent> = this._executeCommandCatchingErrors(target, cmd, force, args, stdio, env, cacheOptions).pipe(
+        concatMap((result) => this._mapToRunCommandEvents(cmd, executions, result, target, mode)),
       );
       return concat(
         started$,
@@ -375,7 +387,7 @@ export class Runner {
     return of({ type: RunCommandEventEnum.NODE_SKIPPED, ...target });
   }
 
-  private static _executeCommandCatchingErrors(
+  private _executeCommandCatchingErrors(
     target: IResolvedTarget,
     cmd: string,
     force: boolean,
@@ -384,6 +396,7 @@ export class Runner {
     env: {[key: string]: string} = {},
     cacheOptions: ICacheOptions = {},
   ) : Observable<CaughtProcessExecution>{
+    this._logger?.info('Preparing command', {cmd, workspace: target.workspace.name});
     const command$ = target.workspace.run(cmd, force, args, stdio, env, cacheOptions);
     return command$.pipe(
       map((result) => ({ status: 'ok' as const, result, target })),
@@ -391,7 +404,8 @@ export class Runner {
     );
   }
 
-  private static _mapToEventsAndInvalidateCacheIfNecessary(
+  private _mapToRunCommandEvents(
+    cmd: string,
     executions: Set<CaughtProcessExecution>,
     execution: CaughtProcessExecution,
     target: IResolvedTarget,
@@ -400,14 +414,18 @@ export class Runner {
     return new Observable<RunCommandEvent>((obs) => {
       executions.add(execution);
       const workspace = target.workspace;
+      this._logger?.info('Mapping events for', { workspace: workspace.name, cmd });
       if (execution.status === 'ok') {
         const result = execution.result;
+        this._logger?.info('Execution success, sending node processed event', { workspace: workspace.name, cmd });
         obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace: workspace });
         obs.complete();
       } else  if (mode === 'topological') {
+        this._logger?.info('Execution errored in topological mode, sending node errored event and aborting', { workspace: workspace.name, cmd });
         obs.error({ type: RunCommandEventEnum.NODE_ERRORED, error: execution.error, workspace });
         obs.complete();
       } else {
+        this._logger?.info('Execution errored in parallel mode, sending node errored event and continuing', { workspace: workspace.name, cmd });
         obs.next({ type: RunCommandEventEnum.NODE_ERRORED, error: execution.error, workspace });
         obs.complete();
       }
