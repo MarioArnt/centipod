@@ -43,7 +43,9 @@ export class InMemoryLogHandler extends AbstractLogsHandler<Array<string>> {
 
   append(target: string, chunk: string | Buffer): void {
     this.open(target);
-    this.get(target)?.push(chunk.toString());
+    if (chunk) {
+      this.get(target)?.push(chunk.toString());
+    }
   }
 
   getAll(target: string): string {
@@ -60,13 +62,22 @@ export abstract class LogFilesHandler extends AbstractLogsHandler<WriteStream> {
   }
 
   append(target: string, chunk: string | Buffer): void {
+    console.debug(target, 'Appending', chunk.toString());
     this.open(target);
-    console.debug('Streaming', chunk.length, 'bytes to', this.get(target)?.path);
-    console.debug(chunk.toString());
-    this.get(target)?.write(chunk.toString());
+    try {
+      if (chunk) {
+        this.get(target)?.write(chunk);
+      }
+    } catch (e) {
+      console.warn('Error writing log file', e);
+    }
   }
 
   close(target: string) {
-    this.get(target)?.close();
+    const TEN_SECONDS = 10 * 1000;
+    setTimeout(() => {
+      this.get(target)?.close();
+      this._logs.delete(target);
+    }, TEN_SECONDS);
   }
 }

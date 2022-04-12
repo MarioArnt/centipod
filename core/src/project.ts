@@ -67,17 +67,14 @@ export class Project extends Workspace {
   }
 
   getTopologicallySortedWorkspaces(to?: Workspace[]): Workspace[] {
-    //console.debug('Sorting workspaces topologically');
     const sortedWorkspaces: Set<Workspace> = new Set<Workspace>();
     const visitWorkspace = (workspace: Workspace, depth = 0): void => {
-      //console.debug('-'.repeat(depth), 'Visiting', workspace.name)
       for (const dep of workspace.dependencies()) {
         visitWorkspace(dep, depth + 1);
       }
       sortedWorkspaces.add(workspace);
     };
     if (to) {
-      //console.debug('Explicit targets', to.map((w) => w.name));
       for (const target of to) {
         visitWorkspace(target);
       }
@@ -86,7 +83,6 @@ export class Project extends Workspace {
         visitWorkspace(root);
       }
     }
-    //console.debug('Workspaces sorted topologically', [...sortedWorkspaces].map((w) => w.name));
     return [...sortedWorkspaces];
   }
 

@@ -37,20 +37,23 @@ export class Watcher {
     this.unwatch();
     const filesChanges = new Map<IResolvedTarget, Array<IChangeEvent>>();
     this.targets.forEach((target) => {
-      const patterns = target.workspace.config[this.cmd].src;
+      const patterns = target.workspace.config[this.cmd]?.src;
       patterns?.forEach((glob) => {
         this._logger?.info('Watching', join(target.workspace.root, glob));
         this._watcher = watch(join(target.workspace.root, glob)).on('all', (event, path) => {
-          if (filesChanges.has(target)) {
-            filesChanges.get(target)?.push({ event, path });
-          } else {
-            filesChanges.set(target, [{ event, path }]);
+          if (event === 'change') {
+            if (filesChanges.has(target)) {
+              filesChanges.get(target)?.push({ event, path });
+            } else {
+              filesChanges.set(target, [{ event, path }]);
+            }
           }
         });
       });
     });
     setInterval(() => {
       if (filesChanges.size) {
+        console.debug('Sources changed', filesChanges);
         this._events$.next(Array.from(filesChanges.entries()).map(([target, events]) => ({
           target,
           events,

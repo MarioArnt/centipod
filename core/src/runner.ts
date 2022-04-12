@@ -79,12 +79,21 @@ export class Runner {
     env: {[key: string]: string} = {}
   ): Observable<RunCommandEvent | StepCompletedEvent> {
     this._logger?.debug('Schedule tasks', { cmd });
-    const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env));
+    const steps$ = targets.map((step) => this._runStep(step, targets, cmd, options.force, options.watch || false, options.mode, args, options.stdio, env));
     return from(steps$).pipe(concatAll());
   }
 
   private _rescheduleTasks(cmd: string, currentStep: IResolvedTarget[], impactedTargets: Set<Workspace>, targets: OrderedTargets, options: RunOptions, args: string[] | string, env: { [p: string]: string }) {
-    this._logger?.debug('Rescheduling from step', targets.indexOf(currentStep))
+    this._logger?.debug('Rescheduling from step', targets.indexOf(currentStep));
+    console.debug('Rescheduling', cmd, targets
+      .filter((step) => {
+        return targets.indexOf(step) >= targets.indexOf(currentStep);
+      }).map((step) => {
+        if (targets.indexOf(step) === targets.indexOf(currentStep)) {
+          return step.filter((t) => impactedTargets.has(t.workspace)).map((t) => t.workspace.name);
+        }
+        return step.map((t) => t.workspace.name);
+      }));
     const subsequentSteps$ = targets
       .filter((step) => {
         return targets.indexOf(step) >= targets.indexOf(currentStep);
@@ -93,9 +102,9 @@ export class Runner {
         this._logger?.debug('Scheduling step', targets.indexOf(step));
         if (targets.indexOf(step) === targets.indexOf(currentStep)) {
           this._logger?.debug('Ignoring non-impacted targets, impacted targets are', Array.from(impactedTargets).map(w => w.name));
-          return this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env, impactedTargets);
+          return this._runStep(step, targets, cmd, options.force, options.watch || false, options.mode, args, options.stdio, env, impactedTargets);
         }
-        return this._runStep(step, targets, cmd, options.force, options.mode, args, options.stdio, env);
+        return this._runStep(step, targets, cmd, options.force, options.watch || false, options.mode, args, options.stdio, env);
       });
     return from(subsequentSteps$).pipe(concatAll());
   }
@@ -131,6 +140,7 @@ export class Runner {
             complete: () => obs.complete()
           })
         } else {
+          console.debug('Running target', cmd, 'in watch mode');
           this._logger?.info('Running target', cmd, 'in watch mode');
           let currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
           const watcher = new Watcher(targets, cmd, debounce, this._logger?.logger);
@@ -239,6 +249,7 @@ export class Runner {
           });
           sourcesChange$.subscribe((changes) => {
             for (const change of changes) {
+              console.debug('Source changed', cmd, change.target.workspace.name);
               this._logger?.debug('Source changed', change.target.workspace.name);
               const impactedTarget = change.target;
               obs.next({ type: RunCommandEventEnum.SOURCES_CHANGED, ...change })
@@ -253,10 +264,12 @@ export class Runner {
               this._logger?.debug({ isBefore: isBeforeCurrentStep(impactedStep), isEqual: isEqualsCurrentStep(impactedStep), hasStarted: !hasNotStartedYet, isProcessed, isProcessing })
               if (isEqualsCurrentStep(impactedStep) && !hasNotStartedYet) {
                 impactedTargets.add(change.target.workspace);
+                console.debug(cmd, 'Impacted step is same than current step. Should abort after current step execution');
                 this._logger?.debug('Impacted step is same than current step. Should abort after current step execution');
                 letFinishStepAndAbort = true;
                 shouldKill$.next(change.target.workspace);
               } else if (isBeforeCurrentStep(impactedStep)) {
+                console.debug(cmd, 'Impacted step before current step. Should abort immediately');
                 this._logger?.debug('Impacted step before current step. Should abort immediately');
                 shouldAbort$.next();
                 impactedTargets.add(change.target.workspace);
@@ -277,6 +290,7 @@ export class Runner {
     targets: OrderedTargets,
     cmd: string,
     force: boolean,
+    watch: boolean,
     mode: 'topological' | 'parallel',
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
@@ -287,7 +301,7 @@ export class Runner {
     this._logger?.info('Preparing step', targets.indexOf(step), { cmd });
     const tasks$ = step
       .filter((w) => !only || only.has(w.workspace))
-      .map((w) => this._runForWorkspace(executions, w, cmd, force, mode, args, stdio, env, this._cacheOptions));
+      .map((w) => this._runForWorkspace(executions, w, cmd, force, watch, mode, args, stdio, env, this._cacheOptions));
     const step$ = from(tasks$).pipe(
       mergeAll(this._concurrency),
     );
@@ -368,6 +382,7 @@ export class Runner {
     target: IResolvedTarget,
     cmd: string,
     force: boolean,
+    watch: boolean,
     mode: 'topological' | 'parallel',
     args: string[] | string = [],
     stdio: 'pipe' | 'inherit' = 'pipe',
@@ -377,7 +392,7 @@ export class Runner {
     if (target.affected && target.hasCommand) {
       const started$: Observable<RunCommandEvent>  = of({ type: RunCommandEventEnum.NODE_STARTED, workspace: target.workspace });
       const execute$: Observable<RunCommandEvent> = this._executeCommandCatchingErrors(target, cmd, force, args, stdio, env, cacheOptions).pipe(
-        concatMap((result) => this._mapToRunCommandEvents(cmd, executions, result, target, mode)),
+        concatMap((result) => this._mapToRunCommandEvents(cmd, executions, result, target, mode, watch)),
       );
       return concat(
         started$,
@@ -410,6 +425,7 @@ export class Runner {
     execution: CaughtProcessExecution,
     target: IResolvedTarget,
     mode: 'topological' | 'parallel',
+    watch: boolean,
   ): Observable<RunCommandEvent> {
     return new Observable<RunCommandEvent>((obs) => {
       executions.add(execution);
@@ -420,7 +436,7 @@ export class Runner {
         this._logger?.info('Execution success, sending node processed event', { workspace: workspace.name, cmd });
         obs.next({ type: RunCommandEventEnum.NODE_PROCESSED, result, workspace: workspace });
         obs.complete();
-      } else  if (mode === 'topological') {
+      } else  if (mode === 'topological' && !watch) {
         this._logger?.info('Execution errored in topological mode, sending node errored event and aborting', { workspace: workspace.name, cmd });
         obs.error({ type: RunCommandEventEnum.NODE_ERRORED, error: execution.error, workspace });
         obs.complete();

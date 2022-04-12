@@ -29,9 +29,9 @@ const commandWrapper = async (fn: () => Promise<void> | void, keepOpen = false):
 
 program
   .command('list [workspace]')
-  .description('start microlambda services')
+  .description('list workspace of the project')
   .action(
-    async (cmd) =>
+    async () =>
       await commandWrapper(async () => {
         throw new Error('Not implemented');
       }, true),
@@ -39,21 +39,21 @@ program
 
   program
   .command('affected <rev1> [rev2]')
-  .description('start microlambda services')
+  .description('show workspaces affected between two revisions. Second argument for revision is optional, if not set HEAD will be used.')
   .action(
     async (rev1, rev2) =>
       await commandWrapper(async () => {
-        affected(rev1, rev2);
+        await affected(rev1, rev2);
       }, true),
   );
 
   program
   .command('is-affected <workspace> <rev1> [rev2]')
-  .description('start microlambda services')
+  .description('check whether or not a workspace has been affected between two revisions. Second argument for revision is optional, if not set HEAD will be used.')
   .action(
     async (workspace, rev1, rev2) =>
       await commandWrapper(async () => {
-        isAffected(workspace, rev1, rev2);
+        await isAffected(workspace, rev1, rev2);
       }, true),
   );
 
@@ -63,14 +63,13 @@ program
   .option('-t, --topological', 'run command in dependency before')
   .option('--force', 'ignore cached outputs and checksums')
   .option('--watch', 'watch sources and run the command again on changes')
-  .option('--to <workspace>', 'run the command only to a given workspace')
+  .option('--to <workspace>', 'run the command only to a given workspace and its dependencies')
   .option('--affected <rev1>..[rev2]', 'only run command on workspaces affected between two revisions')
   .description('run a centipod target through the dependencies graph')
   .action(
     async (cmd, options) =>
       await commandWrapper(async () => {
-        console.debug('run');
-        run(cmd, options);
+        await run(cmd, options);
       }, true),
   );
 
@@ -79,24 +78,24 @@ program
   .option('--access <access>')
   .option('--yes')
   .option('--dry')
-  .description('publish package')
+  .description('bump version manually and publish package.')
   .action(
     async (workspace, bump, identifier, options) =>
       await commandWrapper(async () => {
-        publish(workspace, bump, identifier, options);
+        await publish(workspace, bump, identifier, options);
       }, true),
   );
 
   const semantic = program
     .command('semantic-release [identifier]')
-    .option('--access <access>')
+    .option('--access <access>', '')
     .option('--yes')
     .option('--dry')
-    .description('publish affected packages using semantic versioning based on coventional changelog')
+    .description('publish affected packages using semantic versioning based on conventional commit messages')
     .action(
       async (identifier, _options, cmd) =>
         await commandWrapper(async () => {
-          semanticRelease(identifier, cmd._optionValues);
+          await semanticRelease(identifier, cmd._optionValues);
           // TODO:
           // Take all commits since last semantic-* tag (if not, publish version 1.0.0 of each pkg and tag semantic-1.0.0)
           // Start a map with <pkg, 'none', 'patch', 'minor', 'major'>
@@ -114,11 +113,11 @@ program
 
   semantic
     .command('init')
-    .description('publish affected packages using semantic versioning based on coventional changelog')
+    .description('create tags and set up semantic release in the project')
     .action(
       async (_opt, cmd) =>
         await commandWrapper(async () => {
-          semanticReleaseInit(cmd.parent._optionValues);
+          await semanticReleaseInit(cmd.parent._optionValues);
         }, true),
     );
 

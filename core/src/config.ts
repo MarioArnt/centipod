@@ -1,5 +1,5 @@
 import {dirname, join} from "path";
-import {promises as fs} from "fs";
+import { existsSync, promises as fs } from "fs";
 
 export interface ILogsCondition {
   type: 'success' | 'failure';
@@ -55,6 +55,9 @@ export const loadConfig = async (path: string): Promise<IConfig> => {
       // TODO: Throw properly
       // Throw also if not exists
       throw new Error('Cannot extend himself');
+    }
+    if (!existsSync(extending)) {
+      throw new Error('Extending config that does not exists');
     }
     const parentConfig = await loadConfig(extending);
     return { ...parentConfig, ...targets}

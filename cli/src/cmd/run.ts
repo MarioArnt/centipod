@@ -14,7 +14,7 @@ import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
 
 export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, watch?: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
-  // TODO: Validate options (conflict between parallel/topological)
+  // TODO: Validate options (conflict between parallel/topological, watch/affected)
   const project =  await Project.loadProject(resolveProjectRoot());
   const to = options.to ? resolveWorkspace(project, options.to) : undefined;
   logger.lf();

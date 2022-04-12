@@ -21,7 +21,6 @@ import {CentipodError, CentipodErrorCode} from './error';
 import semver from 'semver';
 import { catchError, finalize } from "rxjs/operators";
 import Timer = NodeJS.Timer;
-import debug from 'debug';
 import { AbstractLogsHandler, ILogsHandler } from "./logs-handler";
 import processTree from "ps-tree";
 import { isPortAvailable } from "./port-available";
@@ -184,17 +183,21 @@ export class Workspace {
   }
 
   private async _handleDaemon<T = string>(
+    target: string,
     daemonConfig: ILogsCondition | ILogsCondition[],
     cmdProcess: ExecaChildProcess,
     startedAt: number,
   ): Promise<IDaemonCommandResult> {
+    this._logger?.debug('Handling daemon for process', cmdProcess);
     const logsConditions = Array.isArray(daemonConfig) ? daemonConfig : [daemonConfig];
     let killed = false;
     const crashed$ = new Observable<IDaemonCommandResult>((obs) => {
+      this._logger?.debug('Watching for daemon crash');
       cmdProcess.catch((crashed) => {
+        this._logger?.error(crashed);
         if (!killed) {
-          this._handleLogs('append', 'Daemon crashed');
-          this._handleLogs('append', crashed.message);
+          this._handleLogs('append', target,'Daemon crashed');
+          this._handleLogs('append', target, crashed.message);
           this._logger?.warn('Daemon crashed', { target: this.name });
           obs.error(crashed);
         }
@@ -202,8 +205,11 @@ export class Workspace {
     });
     this._logger?.info('Verifying logs conditions', { target: this.name });
     const timers: Timer[] = [];
+    this._logger?.debug('logsConditions', JSON.stringify(logsConditions));
     const logsConditionsMet$ = logsConditions.map((condition) => new Observable<IDaemonCommandResult>((obs) => {
+      this._logger?.debug('Watching for log condition', condition);
       const logStream = cmdProcess[condition.stdio];
+      this._logger?.debug(logStream);
       if (!logStream) {
         return obs.error('Log stream not readable, did you try to run a daemon cmd using stdio inherit ?')
       }
@@ -214,6 +220,7 @@ export class Workspace {
         this._logger?.debug(`[${this.name}_child_process]`, chunk.toString());
         if (condition.matcher === 'contains' && chunk.toString().includes(condition.value)) {
           this._logger?.info('Condition resolved for', this.name, condition);
+          this._logger?.debug('Condition resolved for', this.name, condition);
           clearTimeout(timer);
           if (condition.type === 'success') {
             obs.next({daemon: true, process: cmdProcess, took: Date.now() - startedAt});
@@ -287,7 +294,7 @@ export class Workspace {
       const watchKilled = (): void => {
         if (childProcess) {
           let killed = false;
-          childProcess.on('close', (code) => {
+          childProcess.on('close', () => {
             // On close, we are sure that every process in process tree has exited, so we can complete observable
             // This is the most common scenario, where sls offline gracefully shutdown underlying hapi server and
             // close properly with status 0
@@ -353,7 +360,8 @@ export class Workspace {
     });
     if (typeof cmd !== 'string' && cmd.daemon) {
       this._logger?.info('Command flagged as daemon', { cmd: target, target: this.name });
-      return this._handleDaemon(cmd.daemon, _process, startedAt);
+      this._logger?.debug('Handling daemon', { cmd: target, target: this.name });
+      return this._handleDaemon(target, cmd.daemon, _process, startedAt);
     } else {
       this._logger?.info('Command not flagged as daemon', { cmd: target, target: this.name });
       try {
@@ -379,16 +387,21 @@ export class Workspace {
   ): Promise<Array<CommandResult>> {
     const results: Array<CommandResult> = [];
     const config = this.config[target];
-    const cmds = config.cmd;
+    const commands = config.cmd;
     const _args = Array.isArray(args) ? args : [args];
     let idx = 0;
     this._handleLogs('open', target);
-    for (const _cmd of Array.isArray(cmds) ? cmds : [cmds]) {
+    console.debug('Open', target);
+    for (const _cmd of Array.isArray(commands) ? commands : [commands]) {
+      this._logger?.debug('cmd', JSON.stringify(_cmd));
       this._logger?.info('Do run command', { target: this.name, cmd: _cmd, args: _args[idx], env, stdio});
       results.push(await this._runCommand(target, _cmd, _args[idx], env, stdio));
       idx++;
     }
-    this._handleLogs('close', target);
+    if (Array.isArray(commands) ? commands : [commands].some((cmd) => typeof cmd !== 'string' && cmd.daemon)) {
+      console.debug('Close', target);
+      this._handleLogs('close', target);
+    }
     this._logger?.info('All commands run', { cmd: target, target: this.name }, results);
     return results;
   }
@@ -443,6 +456,13 @@ export class Workspace {
       this._logger?.info('Cache read', { cmd: target, target: this.name }, cachedOutputs);
       if (!force && cachedOutputs) {
         this._logger?.info('From cache', { cmd: target, target: this.name });
+        this._handleLogs('open', target);
+        cachedOutputs.forEach((output) => {
+          this._handleLogs('append', target, output.command);
+          this._handleLogs('append', target, output.all);
+          this._handleLogs('append', target, `Process exited with status ${output.exitCode} (${output.took}ms)`);
+        });
+        this._handleLogs('close', target);
         return { commands: cachedOutputs, overall: Date.now() - now, fromCache: true };
       }
       this._logger?.info('Cache outdated', { cmd: target, target: this.name });
@@ -465,6 +485,7 @@ export class Workspace {
     this._logger?.info('Preparing command', { cmd: target, workspace: this.name });
     return new Observable<IProcessResult>((obs) => {
       this._logger?.info('Running cmd', { cmd: target, target: this.name });
+      this._logger?.debug('Running cmd', target)
       this._run(target, force, args, env, options, stdio)
         .then((result) => {
           this._logger?.info('Success', { cmd: target, target: this.name }, result);
@@ -550,6 +571,6 @@ export class Workspace {
 
   async getLastReleaseTag(): Promise<string> {
     const tags = await git.tags();
-    return tags.all.filter((t) => t.startsWith(this.name)).reduce((acc, val) => semver.gt(acc, val.substr(this.name.length + 1)) ? acc : val.substr(this.name.length + 1), '0.0.0');
+    return tags.all.filter((t) => t.startsWith(this.name)).reduce((acc, val) => semver.gt(acc, val.substring(this.name.length + 1)) ? acc : val.substring(this.name.length + 1), '0.0.0');
   }
 }
