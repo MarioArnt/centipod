@@ -1,8 +1,8 @@
-import { Project, resloveProjectRoot, Workspace } from "@centipod/core";
+import { Project, resolveProjectRoot, Workspace } from "@centipod/core";
 import { logger } from "../utils/logger";
 
 export const affected = async (rev1: string, rev2?: string): Promise<void> => {
-  const project =  await Project.loadProject(resloveProjectRoot());
+  const project =  await Project.loadProject(resolveProjectRoot());
   const affected = new Set<Workspace>();
   for (const workspace of project.workspaces.values()) {
     if (await workspace.isAffected(rev1, rev2)) {

@@ -1,4 +1,13 @@
-import { CentipodErrorCode, Project, resloveProjectRoot, semanticRelease as prepareRelease, hasSemanticReleaseTags, createSemanticReleaseTag, Publish } from "@centipod/core";;
+import {
+  CentipodErrorCode,
+  Project,
+  resolveProjectRoot,
+  semanticRelease as prepareRelease,
+  hasSemanticReleaseTags,
+  createSemanticReleaseTag,
+  Publish,
+  CentipodError,
+} from '@centipod/core';
 import { logger } from '../utils/logger';
 import { printActions } from '../utils/print-actions';
 import chalk from 'chalk';
@@ -31,17 +40,18 @@ const doPublish = (publisher: Publish, options: IPublishOptions): void => {
   publisher.release({
     access: options.access,
     dry: options.dry || false,
-  }).subscribe(
-    (evt) => printEvent(evt),
-    (err) => {
-      logger.error(err);
-      process.exit(1);
-    },
-    async () => {
-      await createSemanticReleaseTag();
-      logger.lf();
-      logger.info(logger.centipod, logger.success, chalk.green.bold(`Successfully initialized semantic release and published packages`, options.dry ? chalk.bgBlueBright.white(' DRY RUN ') : ''));
-      process.exit(0);
+  }).subscribe({
+      next: (evt) => printEvent(evt),
+      error: (err) => {
+        logger.error(err);
+        process.exit(1);
+      },
+      complete: async () => {
+        await createSemanticReleaseTag();
+        logger.lf();
+        logger.info(logger.centipod, logger.success, chalk.green.bold(`Successfully initialized semantic release and published packages`, options.dry ? chalk.bgBlueBright.white(" DRY RUN ") : ""));
+        process.exit(0);
+      },
     },
   );
 };
@@ -69,7 +79,7 @@ const promptPublishConfirmation = (publisher: Publish, options: IPublishOptions)
 export const semanticRelease  = async (identifier: string, options: IPublishOptions): Promise<void> => {
   // TODO: Throw if git working directory not cleaned
   // TODO: Enforce branch to main/next etc... Configure in some rc file
-  const project =  await Project.loadProject(resloveProjectRoot());
+  const project =  await Project.loadProject(resolveProjectRoot());
   logger.lf();
   logger.info(logger.centipod, chalk.white.bold('Initializing new semantic-release update'));
   logger.seperator();
@@ -80,13 +90,13 @@ export const semanticRelease  = async (identifier: string, options: IPublishOpti
     printSummary(publisher);
     promptPublishConfirmation(publisher, options);
   } catch (e) {
-    switch (e.code) {
+    switch ((e as CentipodError).code) {
       case CentipodErrorCode.NOTHING_TO_DO:
-        logger.info('Nothing to do. Evry packages are already up-to-date');
+        logger.info('Nothing to do. Every packages are already up-to-date');
         process.exit(0);
         break
       case CentipodErrorCode.NO_SEMANTIC_RELEASE_TAGS_FOUND:
-        logger.error('Previous semantic release tag could not be found. Have you initialized semenatic-release with command "centipod semantic-release init <version>"');
+        logger.error('Previous semantic release tag could not be found. Have you initialized semantic-release with command "centipod semantic-release init <version>"');
         break
       default:
         logger.error(e);
@@ -97,7 +107,7 @@ export const semanticRelease  = async (identifier: string, options: IPublishOpti
 };
 
 export const semanticReleaseInit  = async (options: IPublishOptions): Promise<void> => {
-  const project =  await Project.loadProject(resloveProjectRoot());
+  const project =  await Project.loadProject(resolveProjectRoot());
   logger.lf();
   logger.info(logger.centipod, chalk.white.bold('Initializing semantic-release flow'));
   logger.seperator();

@@ -1,17 +1,27 @@
-import { ICommandResult, IRunCommandErrorEvent, isNodeErroredEvent, isNodeSucceededEvent, isTargetResolvedEvent, Project, resloveProjectRoot, Workspace } from "@centipod/core";
+import {
+  isNodeEvent,
+  isProcessError,
+  isNodeErroredEvent,
+  isNodeSucceededEvent,
+  isTargetResolvedEvent,
+  Project,
+  resolveProjectRoot,
+  Workspace,
+  isDaemon
+} from "@centipod/core";
 import chalk from 'chalk';
 import { logger } from "../utils/logger";
 import { resolveWorkspace } from "../utils/validate-workspace";
 
-export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
-  // TODO: Validate options (conflict between parallel/topolical)
-  const project =  await Project.loadProject(resloveProjectRoot());
+export const run = async (cmd: string, options: {parallel: boolean, topological: boolean, watch?: boolean, force: boolean, to?: string, affected?: string}): Promise<void> => {
+  // TODO: Validate options (conflict between parallel/topological, watch/affected)
+  const project =  await Project.loadProject(resolveProjectRoot());
   const to = options.to ? resolveWorkspace(project, options.to) : undefined;
   logger.lf();
   logger.info(logger.centipod, `Running command ${chalk.white.bold(cmd)}`, options.to ? `on project ${options.to}` : '');
   logger.seperator();
   logger.info('Topological:', chalk.white(!options.parallel));
-  logger.info('Parallel:', chalk.white(!!options.parallel));
+  logger.info('Parallel:', chalk.white(options.parallel));
   logger.info('Use caches:', chalk.white(!options.force));
   const affected = options.affected?.split('..');
   let revisions: { rev1: string, rev2: string } | undefined;
@@ -22,19 +32,13 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
     revisions = { rev1, rev2 };
   }
   logger.seperator();
-  const isProcessError = (error: unknown): error is ICommandResult => {
-    return (error as ICommandResult)?.stderr != null;
-  };
-  const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
-    const candidate = (error as IRunCommandErrorEvent);
-    return !!candidate?.type && !!candidate?.error;
-  }
+
   const printError = (error: unknown): void => {
     if (isNodeEvent(error)) {
       logger.lf();
       logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(error.workspace.name)}`, logger.failed);
       printError(error.error);
-    } else if (isProcessError(error)) {
+    } else if (isProcessError(error) && !!error.all) {
       logger.lf();
       logger.info(chalk.cyan('>'), error.command);
       logger.lf();
@@ -46,30 +50,41 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
   const failures = new Set<Workspace>();
   const now = Date.now();
   let nbTargets = 0;
-  project.runCommand(cmd, { parallel: options.parallel, force: options.force, affected: revisions, to }).subscribe(
-      (event) => {
+
+  const runOptions =  options.parallel ? {
+    mode: 'parallel' as const, force: options.force, affected: revisions, workspaces: to ? [to] : undefined,
+  } : {
+    mode: 'topological' as const, force: options.force, affected: revisions, to: to ? [to] : undefined,
+  };
+
+  project.runCommand(cmd, runOptions).subscribe({
+      next: (event) => {
         if (isTargetResolvedEvent(event)) {
-          if (!event.targets.length) {
+          if (!event.targets.some((target) => target.hasCommand)) {
             logger.lf();
             logger.error(logger.centipod, logger.failed, `No project found for command "${cmd}"`);
             logger.lf();
             process.exit(1);
           }
           logger.info('Targets resolved:');
-          logger.info(event.targets.map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.name)}`).join('\n'));
+          logger.info(event.targets.filter((t) => t.hasCommand).map((target) => `${' '.repeat(4)}- ${chalk.white.bold(target.workspace.name)}`).join('\n'));
           logger.seperator();
           nbTargets = event.targets.length;
         } else if (isNodeSucceededEvent(event)) {
           logger.lf();
           logger.info(logger.centipod, `Run target ${chalk.white.bold(cmd)} on ${chalk.white.bold(event.workspace.name)} ${logger.took(event.result.overall )} ${event.result.fromCache ? logger.fromCache : ''}`);
           for (const command of event.result.commands) {
-            logger.lf();
-            logger.info(chalk.cyan('>'), command.command);
-            logger.lf();
-            if (command.all) {
-              logger.log(command.all);
+            if (!isDaemon(command)) {
+              logger.lf();
+              logger.info(chalk.cyan('>'), command.command);
+              logger.lf();
+              if (command.all) {
+                logger.log(command.all);
+              } else {
+                logger.info('Process exited with status', command.exitCode);
+              }
             } else {
-              logger.info('Process exited with status', command.exitCode);
+              logger.info('Demon started');
             }
           }
           logger.seperator();
@@ -80,12 +95,12 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
           failures.add(event.workspace);
         }
     },
-    (err) => {
+    error: (err) => {
       printError(err);
       logger.error(logger.centipod, logger.failed, 'Command failed');
       process.exit(1)
     },
-    () => {
+    complete: () => {
       logger.lf();
       const hasFailed = failures.size > 0;
       const status = hasFailed ? logger.failed : logger.success;
@@ -97,5 +112,5 @@ export const run = async (cmd: string, options: {parallel: boolean, topological:
       }
       process.exit(hasFailed ? 1 : 0);
     },
-  );
+  });
 }

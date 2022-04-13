@@ -1,7 +1,9 @@
 import { stub } from "sinon";
 import { promises as fs } from "fs";
+// @ts-ignore
 import {Cache} from "../src/cache";
 import {Checksum} from "../src/checksum";
+// @ts-ignore
 import {CentipodError, CentipodErrorCode, Workspace} from "../src";
 import fastGlob from 'fast-glob';
 import hasha from 'hasha';
@@ -87,7 +89,9 @@ describe('[class] Checksum manager', () => {
       glob.restore();
       fromFile.restore();
       expect(calculated).toEqual({
+        "args": "[]",
         "cmd": "npm run foo",
+        "env": "{}",
         "globs": "src/**/*.ts,test/**/*.ts",
         '/tmp/fake/location/src/index.ts': Buffer.from('1234'),
         '/tmp/fake/location/src/bar.ts': Buffer.from('5678'),
@@ -121,6 +125,8 @@ describe('[class] Checksum manager', () => {
       glob.restore();
       fromFile.restore();
       expect(calculated).toEqual({
+        "args": "[]",
+        "env": "{}",
         "cmd": "npm run pre:test,npm run test",
         "globs": "src/**/*.ts",
         '/tmp/fake/location/src/index.ts': Buffer.from('1234'),
@@ -151,7 +157,7 @@ describe('[class] Checksum manager', () => {
       } catch (e) {
         glob.restore();
         expect(e instanceof CentipodError).toBe(true);
-        expect(e.code).toBe(CentipodErrorCode.NO_FILES_TO_CACHE);
+        expect((e as CentipodError).code).toBe(CentipodErrorCode.NO_FILES_TO_CACHE);
       }
     });
     it.todo('should split processing in one-thousand elements batch to avoid EMFILE error');

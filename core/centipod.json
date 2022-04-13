@@ -1,24 +1,12 @@
 {
-  "lint": {
-    "cmd": "../node_modules/.bin/eslint {src,test}/**/*.{ts,tsx,json,yml}",
-    "src": [
-      "{src,test}/**/*.{ts,tsx,json,yml}"
-    ]
-  },
-  "build": {
-    "cmd": [
-      "rm -rf ./lib",
-      "../node_modules/.bin/tsc --build"
-    ],
-    "src": [
-      "src/**/*.ts"
-    ]
-  },
-  "test": {
-    "cmd": "../node_modules/.bin/jest",
-    "src": [
-      "src/**/*.ts",
-      "test/**/*.ts"
-    ]
+  "extends": "../centipod.json",
+  "targets": {
+    "test": {
+      "cmd":"../node_modules/.bin/jest",
+      "src": [
+        "src/**/*.ts",
+        "test/**"
+      ]
+    }
   }
 }

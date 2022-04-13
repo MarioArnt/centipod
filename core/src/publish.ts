@@ -6,6 +6,7 @@ import { Observable } from "rxjs";
 import { join } from 'path';
 import { CentipodError, CentipodErrorCode } from "./error";
 import { Project } from "./project";
+import { IAbstractLoggerFunctions } from "./logger";
 
 export interface IPublishAction {
   workspace: Workspace;
@@ -18,7 +19,7 @@ export interface IPublishAction {
 enum PublishEventType {
   ACTIONS_RESOLVED,
   PUBLISHED_NODE,
-  COMMITED,
+  COMMITTED,
   PUSHED,
 }
 
@@ -34,7 +35,7 @@ interface IPublishedNodeEvent {
 }
 
 interface ICommitCreatedEvent {
-  type: PublishEventType.COMMITED;
+  type: PublishEventType.COMMITTED;
   message: string;
 }
 
@@ -49,7 +50,7 @@ export const isActionsResolvedEvent = (event: PublishEvent): event is  IResolved
 
 export const isPublishedEvent = (event: PublishEvent): event is   IPublishedNodeEvent => event.type === PublishEventType.PUBLISHED_NODE;
 
-export const isCommittedEvent = (event: PublishEvent): event is  ICommitCreatedEvent => event.type === PublishEventType.COMMITED;
+export const isCommittedEvent = (event: PublishEvent): event is  ICommitCreatedEvent => event.type === PublishEventType.COMMITTED;
 
 export const isPushedEvent = (event: PublishEvent): event is  IPushedEvent => event.type === PublishEventType.PUSHED;
 
@@ -70,6 +71,8 @@ export class PublishActions {
 }
 
 export class Publish {
+  private _logger: IAbstractLoggerFunctions | undefined;
+
   constructor(
     private readonly _project: Project,
   ) {}
@@ -109,10 +112,10 @@ export class Publish {
           }
           try {
             await action.workspace.setVersion(action.targetVersion);
-            const output = await this._publish(action.workspace, options.access, options.dry);
+            const output = await Publish._publish(action.workspace, options.access, options.dry);
             toCommit.push(join(action.workspace.root, 'package.json'));
             if (!options.dry) {
-              await this._createTag(action.workspace, action.targetVersion);
+              await Publish._createTag(action.workspace, action.targetVersion);
             }
             obs.next({ type: PublishEventType.PUBLISHED_NODE, action, output });
           } catch (e) {
@@ -133,7 +136,7 @@ export class Publish {
               toCommit,
               message,
             );
-            obs.next( {type: PublishEventType.COMMITED, message });
+            obs.next( {type: PublishEventType.COMMITTED, message });
             await git.push();
             obs.next( {type: PublishEventType.PUSHED })
             obs.complete();
@@ -149,7 +152,7 @@ export class Publish {
   }
 
   private async _preparePublish(workspace?: Workspace, bump?: semver.ReleaseType, identifier?: string): Promise<PublishActions> {
-    const workspaces = this._project.getTopologicallySortedWorkspaces(workspace);
+    const workspaces = this._project.getTopologicallySortedWorkspaces(workspace ? [workspace] : undefined);
     for (const workspace of workspaces) {
       if (!workspace.version) {
         this._actions.add({
@@ -161,7 +164,7 @@ export class Publish {
       if (workspace.private) {
         this._actions.add({
           workspace,
-          error: new CentipodError(CentipodErrorCode.CANNOT_PUBLISH_PRIVATE_PACKAGE, 'Workspace is private and canoot be published'),
+          error: new CentipodError(CentipodErrorCode.CANNOT_PUBLISH_PRIVATE_PACKAGE, 'Workspace is private and cannot be published'),
         });
         continue;
       }
@@ -188,7 +191,7 @@ export class Publish {
       const isAlreadyPublished = await workspace.isPublished(targetVersion);
       const greaterVersions = await workspace.listGreaterVersionsInRegistry(targetVersion);
       if (isAlreadyPublished || greaterVersions.length) {
-        const error = isAlreadyPublished 
+        const error = isAlreadyPublished
           ? new CentipodError(CentipodErrorCode.ALREADY_PUBLISHED, 'Already published in registry')
           : new CentipodError(CentipodErrorCode.FOUND_GREATER_VERSIONS_IN_REGISTRY, `Latest version in registry if ahead current target version. Latest version in registry: ${greaterVersions.reduce((acc, val) => semver.gt(acc, val) ? acc : val , '0.0.0')}`);
         this._actions.add({
@@ -215,15 +218,15 @@ export class Publish {
    * Check if a workspace source code has been modified since last release.
    * If not skip publication
    * @param workspace
-   * @returns 
+   * @returns
    */
   private async _hasChangedSinceLastRelease(workspace: Workspace): Promise<boolean> {
     const version = workspace.version;
     if (!version) {
       throw new CentipodError(CentipodErrorCode.MISSING_VERSION, `Missing version field in ${workspace.name} package.json`);
     }
-    const tag = this._getTagName(workspace, version);
-    if (await this._tagExsist(tag)) {
+    const tag = Publish._getTagName(workspace, version);
+    if (await this._tagExists(tag)) {
       return workspace.isAffected('HEAD', tag, ['**'], false);
     } else {
       return true;
@@ -231,24 +234,24 @@ export class Publish {
   }
 
   private async _getPrivateDependencies(workspace: Workspace): Promise<Array<Workspace>> {
-    const deps = this._project.getTopologicallySortedWorkspaces(workspace);
+    const deps = this._project.getTopologicallySortedWorkspaces([workspace]);
     return deps.filter((w) => w.private);
   }
 
-  private async _publish(workspace: Workspace, access?: string, dry = false): Promise<ExecaReturnValue<string>> {
+  private static async _publish(workspace: Workspace, access?: string, dry = false): Promise<ExecaReturnValue> {
     const cmd = dry ? 'yarn pack --dry-run' : `yarn npm publish ${access ? '--access ' + access :''}`;
-    return await command(cmd, { cwd: workspace.root, env: { ...process.env, FORCE_COLOR: '2' }, shell: process.platform === 'win32' });
+    return command(cmd, { cwd: workspace.root, env: { ...process.env, FORCE_COLOR: '2' }, shell: process.platform === 'win32' });
   }
 
-  private async _createTag(workspace: Workspace, version: string): Promise<void> {
-    await git.tag(this._getTagName(workspace, version))
+  private static async _createTag(workspace: Workspace, version: string): Promise<void> {
+    await git.tag(Publish._getTagName(workspace, version))
   }
 
-  private _getTagName(workspace: Workspace, version: string): string {
+  private static _getTagName(workspace: Workspace, version: string): string {
     return `${workspace.name}-${version}`;
   }
 
-  private async _tagExsist(tag: string): Promise<boolean> {
+  private async _tagExists(tag: string): Promise<boolean> {
     if (!this._tags.length) {
       this._tags = (await git.tags({ fetch: true })).all;
     }

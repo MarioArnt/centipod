@@ -1,0 +1,21 @@
+{
+  "targets": {
+    "lint": {
+      "cmd": "../node_modules/.bin/eslint {src,test}/**/*.{ts,tsx,json,yml}",
+      "src": [
+        "{src,test}/**/*.{ts,tsx,json,yml}"
+      ]
+    },
+    "lint:fix": {
+      "cmd": "../node_modules/.bin/eslint {src,test}/**/*.{ts,tsx,json,yml} --fix"
+    },
+    "build": {
+      "cmd": [
+        "../node_modules/.bin/tsc --build"
+      ],
+      "src": [
+        "src/**/*.ts"
+      ]
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import {ICommandResult, IRunCommandErrorEvent} from "./process";
+
 export enum CentipodErrorCode {
   NOT_IN_VALID_YARN_PROJECT,
   INVALIDATING_CACHE_FAILED,
@@ -15,7 +17,9 @@ export enum CentipodErrorCode {
   UNABLE_TO_LOAD_WORKSPACE,
   TAG_AND_REGISTRY_VERSIONS_MISMATCH,
   CANNOT_DETERMINE_BUMP,
-  NOTHING_TO_DO
+  NOTHING_TO_DO,
+  BAD_REVISION,
+  CACHE_DISABLED
 }
 
 export class CentipodError extends Error {
@@ -24,4 +28,13 @@ export class CentipodError extends Error {
     super(message);
     this.code = code;
   }
+}
+
+export const isProcessError = (error: unknown): error is ICommandResult => {
+  return (error as ICommandResult)?.all != null;
+};
+
+export const isNodeEvent = (error: unknown): error is IRunCommandErrorEvent => {
+  const candidate = (error as IRunCommandErrorEvent);
+  return !!candidate?.type && !!candidate?.error;
 }

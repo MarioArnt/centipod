@@ -8,16 +8,31 @@ import { isEqual } from 'lodash';
 import { ICommandResult } from './process';
 import { CentipodError, CentipodErrorCode } from './error';
 import { IConfigEntry } from './config';
-import {logger} from "./logger";
+import { IAbstractLoggerFunctions, logger } from "./logger";
+
+export interface ICacheOptions {
+  dir?: string;
+}
 
 export class Cache {
+  private _logger: IAbstractLoggerFunctions | undefined;
+  private readonly _cacheFolder: string;
+
   constructor (
     private readonly _workspace: Workspace,
     private readonly _cmd: string,
-  ) {}
+    private readonly _args: string[] | string = [],
+    private readonly _env: {[key: string]: string} = {},
+    private readonly _options: ICacheOptions = {},
+  ) {
+    this._cacheFolder = join(this._workspace.root, '.caches', this._options.dir || this._cmd);
+  }
+
+  get args(): string[] | string { return this._args };
+  get env(): {[key: string]: string} { return this._env };
 
   get cacheFolder(): string {
-    return join(this._workspace.root, '.caches', this._cmd);
+    return this._cacheFolder;
   }
 
   get outputPath(): string {
@@ -34,7 +49,10 @@ export class Cache {
 
   private _checksums: Record<string, string> | undefined;
 
-  async read(): Promise<Array<ICommandResult<string>> | null> {
+  async read(): Promise<Array<ICommandResult> | null> {
+    if (!this.config.src) {
+      return null;
+    }
     try {
       const checksums = new Checksum(this);
       const [currentChecksums, storedChecksum] = await Promise.all([
@@ -48,7 +66,7 @@ export class Cache {
       const output = await fs.readFile(this.outputPath);
       return JSON.parse(output.toString());
     } catch (e) {
-      if (e.code === CentipodErrorCode.NO_FILES_TO_CACHE) {
+      if ((e as CentipodError).code === CentipodErrorCode.NO_FILES_TO_CACHE) {
         logger.warn(chalk.yellow(`Patterns ${this.config.src.join('|')} has no match: ignoring cache`));
         return null;
       }
@@ -58,6 +76,9 @@ export class Cache {
   }
 
   async write(output: Array<ICommandResult>): Promise<void> {
+    if (!this.config.src) {
+      return;
+    }
     try {
       const checksums = new Checksum(this)
       const toWrite = this._checksums ?? await checksums.calculate();
@@ -73,6 +94,9 @@ export class Cache {
   }
 
   async invalidate(): Promise<void> {
+    if (!this.config.src) {
+      return;
+    }
     try {
       const checksums = new Checksum(this);
       const exists = async (path: string): Promise<boolean> => {
@@ -80,7 +104,7 @@ export class Cache {
           await fs.access(path, F_OK);
           return true;
         } catch (e) {
-          if (e.code === 'ENOENT') {
+          if ((e as { code: string }).code === 'ENOENT') {
             return false;
           }
           throw e;
