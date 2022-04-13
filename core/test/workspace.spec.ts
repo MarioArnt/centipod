@@ -62,7 +62,6 @@ describe('[class] workspace', () => {
       stubs.cacheRead.resolves([{ stdout: 'Hello world' }]);
       stubs.cacheWrite.resolves();
       workspace.run('foo').subscribe((result) => {
-        console.debug(result);
         expect(result.overall).toBeGreaterThan(0);
         expect(result.fromCache).toBe(true);
         expect((result.commands[0] as ICommandResult).stdout).toBe('Hello world')

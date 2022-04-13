@@ -62,7 +62,6 @@ export abstract class LogFilesHandler extends AbstractLogsHandler<WriteStream> {
   }
 
   append(target: string, chunk: string | Buffer): void {
-    console.debug(target, 'Appending', chunk.toString());
     this.open(target);
     try {
       if (chunk) {

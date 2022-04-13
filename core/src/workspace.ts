@@ -391,7 +391,6 @@ export class Workspace {
     const _args = Array.isArray(args) ? args : [args];
     let idx = 0;
     this._handleLogs('open', target);
-    console.debug('Open', target);
     for (const _cmd of Array.isArray(commands) ? commands : [commands]) {
       this._logger?.debug('cmd', JSON.stringify(_cmd));
       this._logger?.info('Do run command', { target: this.name, cmd: _cmd, args: _args[idx], env, stdio});
@@ -399,7 +398,6 @@ export class Workspace {
       idx++;
     }
     if (Array.isArray(commands) ? commands : [commands].some((cmd) => typeof cmd !== 'string' && cmd.daemon)) {
-      console.debug('Close', target);
       this._handleLogs('close', target);
     }
     this._logger?.info('All commands run', { cmd: target, target: this.name }, results);

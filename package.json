@@ -1,6 +1,6 @@
 {
   "name": "@neoxia/centipod",
-  "version": "0.0.1-alpha.0",
+  "version": "0.1.0-alpha.0",
   "private": true,
   "workspaces": [
     "core",
@@ -19,25 +19,25 @@
     "prerelease:rc": "yarn centipod semantic-release rc --access public"
   },
   "devDependencies": {
-    "@centipod/cli": "^0.0.1-alpha.3",
-    "@centipod/core": "^0.0.1-alpha.3",
+    "@centipod/cli": "workspace:*",
+    "@centipod/core": "workspace:*",
     "@commitlint/cli": "^12.1.4",
     "@commitlint/config-conventional": "^12.1.4",
     "@types/jest": "^26.0.24",
     "@types/node": "^15.0.1",
     "@types/sinon": "^10.0.2",
-    "@typescript-eslint/eslint-plugin": "^4.24.0",
-    "@typescript-eslint/parser": "^4.24.0",
-    "eslint": "^7.26.0",
-    "eslint-config-prettier": "^8.3.0",
-    "eslint-plugin-prettier": "^3.4.0",
+    "@typescript-eslint/eslint-plugin": "^5.19.0",
+    "@typescript-eslint/parser": "^5.19.0",
+    "eslint": "^8.13.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^4.0.0",
     "jest": "^27.0.6",
     "lint-staged": "^11.0.0",
     "prettier": "^2.3.0",
     "sinon": "^11.1.2",
     "ts-jest": "^27.0.4",
     "tslib": "^2.2.0",
-    "typescript": "^4.2.4"
+    "typescript": "^4.5.2"
   },
   "lint-staged": {
     "cli/**/*.{ts,tsx,json,yml}": [

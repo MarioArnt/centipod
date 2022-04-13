@@ -85,7 +85,7 @@ export class Runner {
 
   private _rescheduleTasks(cmd: string, currentStep: IResolvedTarget[], impactedTargets: Set<Workspace>, targets: OrderedTargets, options: RunOptions, args: string[] | string, env: { [p: string]: string }) {
     this._logger?.debug('Rescheduling from step', targets.indexOf(currentStep));
-    console.debug('Rescheduling', cmd, targets
+    this._logger?.debug('Rescheduling', cmd, targets
       .filter((step) => {
         return targets.indexOf(step) >= targets.indexOf(currentStep);
       }).map((step) => {
@@ -140,7 +140,6 @@ export class Runner {
             complete: () => obs.complete()
           })
         } else {
-          console.debug('Running target', cmd, 'in watch mode');
           this._logger?.info('Running target', cmd, 'in watch mode');
           let currentTasks$ = this._scheduleTasks(cmd, targets, options, args, env);
           const watcher = new Watcher(targets, cmd, debounce, this._logger?.logger);
@@ -249,8 +248,7 @@ export class Runner {
           });
           sourcesChange$.subscribe((changes) => {
             for (const change of changes) {
-              console.debug('Source changed', cmd, change.target.workspace.name);
-              this._logger?.debug('Source changed', change.target.workspace.name);
+              this._logger?.debug('Source changed', cmd, change.target.workspace.name);
               const impactedTarget = change.target;
               obs.next({ type: RunCommandEventEnum.SOURCES_CHANGED, ...change })
               this._logger?.debug('Impacted target', change.target.workspace.name);
@@ -264,13 +262,11 @@ export class Runner {
               this._logger?.debug({ isBefore: isBeforeCurrentStep(impactedStep), isEqual: isEqualsCurrentStep(impactedStep), hasStarted: !hasNotStartedYet, isProcessed, isProcessing })
               if (isEqualsCurrentStep(impactedStep) && !hasNotStartedYet) {
                 impactedTargets.add(change.target.workspace);
-                console.debug(cmd, 'Impacted step is same than current step. Should abort after current step execution');
-                this._logger?.debug('Impacted step is same than current step. Should abort after current step execution');
+                this._logger?.debug(cmd, 'Impacted step is same than current step. Should abort after current step execution');
                 letFinishStepAndAbort = true;
                 shouldKill$.next(change.target.workspace);
               } else if (isBeforeCurrentStep(impactedStep)) {
-                console.debug(cmd, 'Impacted step before current step. Should abort immediately');
-                this._logger?.debug('Impacted step before current step. Should abort immediately');
+                this._logger?.debug(cmd, 'Impacted step before current step. Should abort immediately');
                 shouldAbort$.next();
                 impactedTargets.add(change.target.workspace);
                 letFinishStepAndAbort = false;

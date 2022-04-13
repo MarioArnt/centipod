@@ -53,7 +53,7 @@ export class Watcher {
     });
     setInterval(() => {
       if (filesChanges.size) {
-        console.debug('Sources changed', filesChanges);
+        this._logger?.debug('Sources changed', filesChanges);
         this._events$.next(Array.from(filesChanges.entries()).map(([target, events]) => ({
           target,
           events,
