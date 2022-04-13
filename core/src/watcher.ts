@@ -64,7 +64,7 @@ export class Watcher {
     return this._events$.asObservable();
   }
 
-  unwatch() {
+  unwatch(): void {
     this._watcher?.close();
     this._events$ = new Subject<Array<WatchEvent>>();
   }

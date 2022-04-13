@@ -86,7 +86,7 @@ export class Project extends Workspace {
     return [...sortedWorkspaces];
   }
 
-  registerLogsHandler(handler: new (workspace: Workspace) => AbstractLogsHandler<unknown>) {
+  registerLogsHandler(handler: new (workspace: Workspace) => AbstractLogsHandler<unknown>): void {
     for (const workspace of this._workspaces.values()) {
       workspace.addLogsHandler(new handler(workspace));
     }

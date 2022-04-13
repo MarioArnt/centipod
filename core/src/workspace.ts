@@ -255,7 +255,7 @@ export class Workspace {
     return this._logsHandlers.get(name);
   }
 
-  addLogsHandler(handler: AbstractLogsHandler<unknown>) {
+  addLogsHandler(handler: AbstractLogsHandler<unknown>): void {
     if (this._logsHandlers.has(handler.name)) {
       throw new Error(`Log handler with name ${handler.name} already registered`)
     }
@@ -266,7 +266,7 @@ export class Workspace {
     action: keyof ILogsHandler,
     target: string,
     arg?: string | (string | Buffer) | (ExecaReturnValue | ExecaError),
-  ) {
+  ): void{
     for (const handler of this._logsHandlers.values()) {
       handler[action](target, arg as (string & (string | Buffer)) & (ExecaReturnValue | ExecaError));
     }
@@ -274,7 +274,7 @@ export class Workspace {
 
   private _processes = new Map<string, Map<string, ExecaChildProcess>>();
 
-  get processes() {
+  get processes(): Map<string, Map<string, ExecaChildProcess<string>>> {
     return this._processes;
   }
 
@@ -289,7 +289,7 @@ export class Workspace {
     }
   }
 
-  private static _killProcess(childProcess: ExecaChildProcess, releasePorts: number[] = [], timeout = 500) {
+  private static async _killProcess(childProcess: ExecaChildProcess, releasePorts: number[] = [], timeout = 500): Promise<void> {
     return new Promise<void>((resolve) => {
       const watchKilled = (): void => {
         if (childProcess) {
@@ -446,7 +446,7 @@ export class Workspace {
     options: ICacheOptions = {},
     stdio: 'pipe' | 'inherit' = 'pipe',
   ): Promise<IProcessResult> {
-    let now = Date.now();
+    const now = Date.now();
     this._logger?.info('Running command', { target: this.name, cmd: target, args, env });
     const cache = new Cache(this, target, args, env, options);
     try {
@@ -533,7 +533,7 @@ export class Workspace {
         return parsedInfos;
       } catch (e) {
         try {
-          if (JSON.parse((e as any).stdout).name === 1) { // Not found
+          if (JSON.parse((e as ExecaError).stdout).name === 1) { // Not found
             this._npmInfos = { name: this.name, versions: []};
             return { name: this.name, versions: []};
           }

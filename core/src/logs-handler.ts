@@ -19,7 +19,7 @@ export abstract class AbstractLogsHandler<T> implements ILogsHandler {
   abstract close(target: string): void;
   abstract open(target: string): void;
 
-  commandStarted(target: string, cmd: string) {
+  commandStarted(target: string, cmd: string): void {
     this.append(target,`Process ${cmd} started at ${new Date().toISOString()}`)
   }
 
@@ -29,7 +29,7 @@ export abstract class AbstractLogsHandler<T> implements ILogsHandler {
 
   get(target: string): T | undefined { return this._logs.get(target) }
 
-  protected _open(target: string, initialValue: T) {
+  protected _open(target: string, initialValue: T): void {
     if (!this._logs.has(target)) {
       this._logs.set(target, initialValue);
     }
@@ -39,7 +39,7 @@ export abstract class AbstractLogsHandler<T> implements ILogsHandler {
 export class InMemoryLogHandler extends AbstractLogsHandler<Array<string>> {
   name = 'in-memory';
   open(target: string): void { this._open(target, []) }
-  close() {}
+  close(): void { /* no need to close in memory */ }
 
   append(target: string, chunk: string | Buffer): void {
     this.open(target);
@@ -57,7 +57,7 @@ export abstract class LogFilesHandler extends AbstractLogsHandler<WriteStream> {
   name = 'log-files';
   abstract path(target: string): string;
 
-  open(target: string) {
+  open(target: string): void {
     this._open(target, createWriteStream(this.path(target)));
   }
 
@@ -68,11 +68,11 @@ export abstract class LogFilesHandler extends AbstractLogsHandler<WriteStream> {
         this.get(target)?.write(chunk);
       }
     } catch (e) {
-      console.warn('Error writing log file', e);
+      /* best effort, should not crash the process */
     }
   }
 
-  close(target: string) {
+  close(target: string): void {
     const TEN_SECONDS = 10 * 1000;
     setTimeout(() => {
       this.get(target)?.close();

@@ -83,7 +83,7 @@ export class Runner {
     return from(steps$).pipe(concatAll());
   }
 
-  private _rescheduleTasks(cmd: string, currentStep: IResolvedTarget[], impactedTargets: Set<Workspace>, targets: OrderedTargets, options: RunOptions, args: string[] | string, env: { [p: string]: string }) {
+  private _rescheduleTasks(cmd: string, currentStep: IResolvedTarget[], impactedTargets: Set<Workspace>, targets: OrderedTargets, options: RunOptions, args: string[] | string, env: { [p: string]: string }): Observable<RunCommandEvent | StepCompletedEvent> {
     this._logger?.debug('Rescheduling from step', targets.indexOf(currentStep));
     this._logger?.debug('Rescheduling', cmd, targets
       .filter((step) => {
@@ -109,7 +109,7 @@ export class Runner {
     return from(subsequentSteps$).pipe(concatAll());
   }
 
-  unwatch(cmd: string) {
+  unwatch(cmd: string): void {
     this._logger?.debug('Un-watching command', cmd);
     this._watchers.get(cmd)?.watcher.unwatch();
     this._watchers.get(cmd)?.abort.next();
@@ -150,13 +150,13 @@ export class Runner {
           this._watchers.set(cmd, { watcher, abort: shouldAbort$ });
           this._logger?.debug('Watching sources');
           let currentStep: IResolvedTarget[] | undefined;
-          const isBeforeCurrentStep = (impactedStep: IResolvedTarget[] | undefined) => {
+          const isBeforeCurrentStep = (impactedStep: IResolvedTarget[] | undefined): boolean => {
             if(!currentStep || !impactedStep) {
               return false;
             }
             return targets.indexOf(impactedStep) < targets.indexOf(currentStep);
           }
-          const isEqualsCurrentStep = (impactedStep: IResolvedTarget[] | undefined) => {
+          const isEqualsCurrentStep = (impactedStep: IResolvedTarget[] | undefined): boolean => {
             if(!currentStep || !impactedStep) {
               return false;
             }
@@ -165,10 +165,10 @@ export class Runner {
           let letFinishStepAndAbort = false;
           let allProcessed = false;
           const _workspaceWithRunningProcesses = new Set<Workspace>();
-          let workspaceProcessed = new Set<Workspace>();
-          let impactedTargets = new Set<Workspace>();
-          let killed = new Set<Workspace>();
-          const executeCurrentTasks = () => {
+          const workspaceProcessed = new Set<Workspace>();
+          const impactedTargets = new Set<Workspace>();
+          const killed = new Set<Workspace>();
+          const executeCurrentTasks = (): void => {
             // Clear all re-scheduled workspaces but not others
             allProcessed = false;
             letFinishStepAndAbort = false;
@@ -332,7 +332,7 @@ export class Runner {
       }
       step$.subscribe({
         next: (evt) => {
-          this._logger?.info('Forwarding run command event', { cmd, type: evt.type, workspace: (evt as any)?.workspace?.name });
+          this._logger?.info('Forwarding run command event', { cmd, type: evt.type, workspace: (evt as { workspace: { name: string }})?.workspace?.name });
           obs.next(evt);
         },
         error: (err) => {

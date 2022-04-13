@@ -28,8 +28,8 @@ export class Cache {
     this._cacheFolder = join(this._workspace.root, '.caches', this._options.dir || this._cmd);
   }
 
-  get args() { return this._args };
-  get env() { return this._env };
+  get args(): string[] | string { return this._args };
+  get env(): {[key: string]: string} { return this._env };
 
   get cacheFolder(): string {
     return this._cacheFolder;
